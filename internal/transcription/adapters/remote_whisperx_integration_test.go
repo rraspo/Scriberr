@@ -20,6 +20,10 @@ func TestRemoteWhisperXIntegration(t *testing.T) {
 	if host == "" || user == "" || key == "" || workDir == "" {
 		t.Skip("set SCRIBERR_REMOTE_TEST_HOST/_USER/_KEY/_WORKDIR to run")
 	}
+	model := os.Getenv("SCRIBERR_REMOTE_TEST_MODEL")
+	if model == "" {
+		model = "tiny"
+	}
 	root := t.TempDir()
 	audioPath := filepath.Join(root, "tiny.wav")
 	require.NoError(t, writeTinyWAV(audioPath))
@@ -30,7 +34,7 @@ func TestRemoteWhisperXIntegration(t *testing.T) {
 	executor := NewRemoteWhisperXExecutor(transport, profile)
 	outputDir := filepath.Join(root, "output")
 	require.NoError(t, executor.Execute(context.Background(), "scriberr-integration-test", audioPath,
-		map[string]interface{}{"model": "tiny", "language": "en", "diarize": true, "min_speakers": 1, "max_speakers": 2},
+		map[string]interface{}{"model": model, "language": "en", "diarize": true, "min_speakers": 1, "max_speakers": 2},
 		outputDir, filepath.Join(root, "transcription.log")))
 	matches, err := filepath.Glob(filepath.Join(outputDir, "*.json"))
 	require.NoError(t, err)
@@ -47,7 +51,7 @@ func writeTinyWAV(path string) error {
 	header := make([]byte, 44)
 	copy(header[0:4], "RIFF")
 	binary.LittleEndian.PutUint32(header[4:8], uint32(36+len(data)))
-	copy(header[8:12], "WAVEfmt ")
+	copy(header[8:16], "WAVEfmt ")
 	binary.LittleEndian.PutUint32(header[16:20], 16)
 	binary.LittleEndian.PutUint16(header[20:22], 1)
 	binary.LittleEndian.PutUint16(header[22:24], 1)
