@@ -21,9 +21,10 @@ repository.
 
 ## Branch policy
 
-The default branch remains `main`, matching and tracking the upstream default.
-Do not rename it. Feature work belongs on feature branches so upstream rebases
-remain straightforward.
+The default branch is `master` (owner decision 2026-08-04, overriding the
+fork-keeps-upstream-default convention for this repo). Upstream tracking is
+unaffected: rebase feature branches against `upstream/main`. Feature work
+belongs on feature branches.
 
 ## Build baseline
 
