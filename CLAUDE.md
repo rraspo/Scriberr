@@ -58,3 +58,22 @@ Do not substitute a local Docker build when the Docker socket is unavailable.
 
 User-interface copy stays in English to match upstream and keep changes
 straightforward to merge in a pull request.
+
+## Transcription profile execution fields
+
+Transcription profiles store execution selection and remote SSH connection
+metadata alongside their existing transcription parameters:
+
+- `execution_mode` is text, accepts `local` or `remote`, and defaults to
+  `local`. It selects where the profile's transcription workload runs.
+- `remote_host` is text containing the SSH host name used for remote execution.
+- `remote_port` is an integer SSH port and defaults to `22` when unset.
+- `remote_user` is text containing the SSH login user.
+- `remote_key_path` is text containing a filesystem path to an SSH private key.
+  Profiles never store private key material.
+- `remote_work_dir` is text containing the remote staging directory.
+- `remote_connect_timeout_seconds` is an integer connection timeout and
+  defaults to `10` seconds when unset.
+
+The profile create and update APIs require `remote_host`, `remote_user`, and
+`remote_key_path` whenever `execution_mode` is `remote`.

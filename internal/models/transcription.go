@@ -176,13 +176,20 @@ func (ak *APIKey) BeforeCreate(tx *gorm.DB) error {
 
 // TranscriptionProfile represents a saved transcription configuration profile
 type TranscriptionProfile struct {
-	ID          string         `json:"id" gorm:"primaryKey;type:varchar(36)"`
-	Name        string         `json:"name" gorm:"type:varchar(255);not null"`
-	Description *string        `json:"description,omitempty" gorm:"type:text"`
-	IsDefault   bool           `json:"is_default" gorm:"type:boolean;default:false"`
-	Parameters  WhisperXParams `json:"parameters" gorm:"embedded"`
-	CreatedAt   time.Time      `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt   time.Time      `json:"updated_at" gorm:"autoUpdateTime"`
+	ID                          string         `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	Name                        string         `json:"name" gorm:"type:varchar(255);not null"`
+	Description                 *string        `json:"description,omitempty" gorm:"type:text"`
+	IsDefault                   bool           `json:"is_default" gorm:"type:boolean;default:false"`
+	ExecutionMode               string         `json:"execution_mode" gorm:"type:text;not null;default:'local';check:execution_mode IN ('local','remote')"`
+	RemoteHost                  string         `json:"remote_host" gorm:"type:text"`
+	RemotePort                  int            `json:"remote_port" gorm:"type:int;not null;default:22"`
+	RemoteUser                  string         `json:"remote_user" gorm:"type:text"`
+	RemoteKeyPath               string         `json:"remote_key_path" gorm:"type:text"`
+	RemoteWorkDir               string         `json:"remote_work_dir" gorm:"type:text"`
+	RemoteConnectTimeoutSeconds int            `json:"remote_connect_timeout_seconds" gorm:"type:int;not null;default:10"`
+	Parameters                  WhisperXParams `json:"parameters" gorm:"embedded"`
+	CreatedAt                   time.Time      `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt                   time.Time      `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
 // BeforeCreate sets the ID if not already set
@@ -207,10 +214,10 @@ func (tp *TranscriptionProfile) BeforeSave(tx *gorm.DB) error {
 // LLMConfig represents LLM configuration settings
 type LLMConfig struct {
 	ID            uint      `json:"id" gorm:"primaryKey"`
-	Provider      string    `json:"provider" gorm:"not null;type:varchar(50)"` // "ollama" or "openai"
-	BaseURL       *string   `json:"base_url,omitempty" gorm:"type:text"`       // For Ollama
+	Provider      string    `json:"provider" gorm:"not null;type:varchar(50)"`  // "ollama" or "openai"
+	BaseURL       *string   `json:"base_url,omitempty" gorm:"type:text"`        // For Ollama
 	OpenAIBaseURL *string   `json:"openai_base_url,omitempty" gorm:"type:text"` // For OpenAI custom endpoint
-	APIKey        *string   `json:"api_key,omitempty" gorm:"type:text"`        // For OpenAI (encrypted)
+	APIKey        *string   `json:"api_key,omitempty" gorm:"type:text"`         // For OpenAI (encrypted)
 	IsActive      bool      `json:"is_active" gorm:"type:boolean;default:false"`
 	CreatedAt     time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt     time.Time `json:"updated_at" gorm:"autoUpdateTime"`

@@ -2256,6 +2256,10 @@ func (h *Handler) CreateProfile(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Profile name is required"})
 		return
 	}
+	if err := validateProfileExecution(&profile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	// Check if profile name already exists
 	// TODO: Add FindByName to ProfileRepository if needed, or rely on unique constraint error
@@ -2326,6 +2330,10 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Profile name is required"})
 		return
 	}
+	if err := validateProfileExecution(&updatedProfile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	// Check if profile name already exists (excluding current profile)
 	// TODO: Add check to repository
@@ -2342,6 +2350,34 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, updatedProfile)
+}
+
+func validateProfileExecution(profile *models.TranscriptionProfile) error {
+	if profile.ExecutionMode == "" {
+		profile.ExecutionMode = "local"
+	}
+	if profile.ExecutionMode != "local" && profile.ExecutionMode != "remote" {
+		return fmt.Errorf("execution_mode must be either local or remote")
+	}
+	if profile.RemotePort == 0 {
+		profile.RemotePort = 22
+	}
+	if profile.RemoteConnectTimeoutSeconds == 0 {
+		profile.RemoteConnectTimeoutSeconds = 10
+	}
+	if profile.ExecutionMode != "remote" {
+		return nil
+	}
+	if strings.TrimSpace(profile.RemoteHost) == "" {
+		return fmt.Errorf("remote_host is required when execution_mode is remote")
+	}
+	if strings.TrimSpace(profile.RemoteUser) == "" {
+		return fmt.Errorf("remote_user is required when execution_mode is remote")
+	}
+	if strings.TrimSpace(profile.RemoteKeyPath) == "" {
+		return fmt.Errorf("remote_key_path is required when execution_mode is remote")
+	}
+	return nil
 }
 
 // @Summary Delete transcription profile
