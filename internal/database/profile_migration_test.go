@@ -54,6 +54,7 @@ func TestTranscriptionProfileMigrationBackfillsLocalExecutionDefaults(t *testing
 	require.Equal(t, "local", profile.ExecutionMode)
 	require.Equal(t, 22, profile.RemotePort)
 	require.Equal(t, 10, profile.RemoteConnectTimeoutSeconds)
+	require.Empty(t, profile.RemoteCommandPrefix)
 }
 
 func TestTranscriptionProfileMigrationPreservesExistingFields(t *testing.T) {

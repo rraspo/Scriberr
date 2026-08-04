@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"scriberr/internal/models"
 	"scriberr/internal/transcription/interfaces"
 	"scriberr/pkg/logger"
 )
@@ -18,7 +19,8 @@ import (
 // WhisperXAdapter implements the TranscriptionAdapter interface for WhisperX
 type WhisperXAdapter struct {
 	*BaseAdapter
-	envPath string
+	envPath                string
+	remoteTransportFactory func(models.ProfileExecution) (RemoteTransport, error)
 }
 
 // NewWhisperXAdapter creates a new WhisperX adapter
@@ -273,8 +275,9 @@ func NewWhisperXAdapter(envPath string) *WhisperXAdapter {
 	baseAdapter := NewBaseAdapter("whisperx", filepath.Join(envPath, "WhisperX"), capabilities, schema)
 
 	adapter := &WhisperXAdapter{
-		BaseAdapter: baseAdapter,
-		envPath:     envPath,
+		BaseAdapter:            baseAdapter,
+		envPath:                envPath,
+		remoteTransportFactory: NewSSHTransport,
 	}
 
 	return adapter
@@ -410,6 +413,25 @@ func (w *WhisperXAdapter) Transcribe(ctx context.Context, input interfaces.Audio
 		return nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer w.CleanupTempDirectory(tempDir)
+
+	if procCtx.Execution.Mode == "remote" {
+		transport, err := w.remoteTransportFactory(procCtx.Execution)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create remote transport: %w", err)
+		}
+		executor := NewRemoteWhisperXExecutor(transport, procCtx.Execution)
+		if err := executor.Execute(ctx, procCtx.JobID, input.FilePath, params, tempDir, filepath.Join(procCtx.OutputDirectory, "transcription.log")); err != nil {
+			return nil, fmt.Errorf("WhisperX remote execution failed: %w", err)
+		}
+		result, err := w.parseResult(tempDir, input, params)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse result: %w", err)
+		}
+		result.ProcessingTime = time.Since(startTime)
+		result.ModelUsed = w.GetStringParameter(params, "model")
+		result.Metadata = w.CreateDefaultMetadata(params)
+		return result, nil
+	}
 
 	// Build WhisperX command
 	args, err := w.buildWhisperXArgs(input, params, tempDir)

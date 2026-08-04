@@ -54,6 +54,7 @@ func TestProfileAPIRoundTripRemoteConnectionFields(t *testing.T) {
 		"name": "Remote GPU", "execution_mode": "remote", "remote_host": "gpu-host.example",
 		"remote_port": 2202, "remote_user": "scriberr", "remote_key_path": "/etc/scriberr/keys/id_ed25519",
 		"remote_work_dir": "/srv/scriberr-work", "remote_connect_timeout_seconds": 25,
+		"remote_command_prefix": "wsl -d Ubuntu --",
 	}
 	created := performProfileRequest(t, http.MethodPost, "/profiles", payload, handler.CreateProfile)
 	require.Equal(t, http.StatusOK, created.Code, created.Body.String())
@@ -71,6 +72,7 @@ func TestProfileAPIRoundTripRemoteConnectionFields(t *testing.T) {
 	require.Equal(t, "/etc/scriberr/keys/id_ed25519", profile.RemoteKeyPath)
 	require.Equal(t, "/srv/scriberr-work", profile.RemoteWorkDir)
 	require.Equal(t, 25, profile.RemoteConnectTimeoutSeconds)
+	require.Equal(t, "wsl -d Ubuntu --", profile.RemoteCommandPrefix)
 }
 
 func TestProfileAPIExposesKeyPathButNeverPrivateKeyMaterial(t *testing.T) {

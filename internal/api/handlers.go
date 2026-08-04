@@ -353,6 +353,7 @@ func (h *Handler) UploadAudio(c *gin.Context) {
 			// If we found a profile, update the job and queue it
 			if profile != nil {
 				job.Parameters = profile.Parameters
+				job.Execution = profileExecutionSnapshot(profile)
 				job.Diarization = profile.Parameters.Diarize
 				job.Status = models.StatusPending
 
@@ -457,6 +458,7 @@ func (h *Handler) UploadVideo(c *gin.Context) {
 
 			if profile != nil {
 				job.Parameters = profile.Parameters
+				job.Execution = profileExecutionSnapshot(profile)
 				job.Diarization = profile.Parameters.Diarize
 				job.Status = models.StatusPending
 				if err := h.jobRepo.Update(c.Request.Context(), &job); err == nil {
@@ -2378,6 +2380,15 @@ func validateProfileExecution(profile *models.TranscriptionProfile) error {
 		return fmt.Errorf("remote_key_path is required when execution_mode is remote")
 	}
 	return nil
+}
+
+func profileExecutionSnapshot(profile *models.TranscriptionProfile) models.ProfileExecution {
+	return models.ProfileExecution{
+		Mode: profile.ExecutionMode, RemoteHost: profile.RemoteHost, RemotePort: profile.RemotePort,
+		RemoteUser: profile.RemoteUser, RemoteKeyPath: profile.RemoteKeyPath,
+		RemoteWorkDir: profile.RemoteWorkDir, RemoteCommandPrefix: profile.RemoteCommandPrefix,
+		ConnectTimeoutSeconds: profile.RemoteConnectTimeoutSeconds,
+	}
 }
 
 // @Summary Delete transcription profile

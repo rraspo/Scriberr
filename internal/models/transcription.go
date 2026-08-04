@@ -29,10 +29,24 @@ type TranscriptionJob struct {
 	DeletedAt             gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index" swaggertype:"string"`
 
 	// WhisperX parameters
-	Parameters WhisperXParams `json:"parameters" gorm:"embedded"`
+	Parameters WhisperXParams   `json:"parameters" gorm:"embedded"`
+	Execution  ProfileExecution `json:"execution" gorm:"embedded;embeddedPrefix:execution_"`
 
 	// Relationships
 	MultiTrackFiles []MultiTrackFile `json:"multi_track_files,omitempty" gorm:"foreignKey:TranscriptionJobID"`
+}
+
+// ProfileExecution is the per-job snapshot of a profile's execution settings.
+// Keeping a snapshot ensures queued jobs use the profile selected at submission time.
+type ProfileExecution struct {
+	Mode                  string `json:"mode" gorm:"type:text;not null;default:'local'"`
+	RemoteHost            string `json:"remote_host" gorm:"type:text"`
+	RemotePort            int    `json:"remote_port" gorm:"type:int;not null;default:22"`
+	RemoteUser            string `json:"remote_user" gorm:"type:text"`
+	RemoteKeyPath         string `json:"remote_key_path" gorm:"type:text"`
+	RemoteWorkDir         string `json:"remote_work_dir" gorm:"type:text"`
+	RemoteCommandPrefix   string `json:"remote_command_prefix" gorm:"type:text"`
+	ConnectTimeoutSeconds int    `json:"remote_connect_timeout_seconds" gorm:"type:int;not null;default:10"`
 }
 
 // JobStatus represents the status of a transcription job
@@ -186,6 +200,7 @@ type TranscriptionProfile struct {
 	RemoteUser                  string         `json:"remote_user" gorm:"type:text"`
 	RemoteKeyPath               string         `json:"remote_key_path" gorm:"type:text"`
 	RemoteWorkDir               string         `json:"remote_work_dir" gorm:"type:text"`
+	RemoteCommandPrefix         string         `json:"remote_command_prefix" gorm:"type:text"`
 	RemoteConnectTimeoutSeconds int            `json:"remote_connect_timeout_seconds" gorm:"type:int;not null;default:10"`
 	Parameters                  WhisperXParams `json:"parameters" gorm:"embedded"`
 	CreatedAt                   time.Time      `json:"created_at" gorm:"autoCreateTime"`

@@ -219,6 +219,7 @@ func (u *UnifiedTranscriptionService) processSingleTrackJob(ctx context.Context,
 		OutputDirectory: filepath.Join(u.outputDirectory, job.ID),
 		TempDirectory:   u.tempDirectory,
 		Metadata:        map[string]string{},
+		Execution:       job.Execution,
 	}
 
 	// Create output directory

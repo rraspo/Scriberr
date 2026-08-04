@@ -72,6 +72,9 @@ metadata alongside their existing transcription parameters:
 - `remote_key_path` is text containing a filesystem path to an SSH private key.
   Profiles never store private key material.
 - `remote_work_dir` is text containing the remote staging directory.
+- `remote_command_prefix` is optional text prepended to each remote command and
+  defaults to empty. It supports SSH servers that need an additional execution
+  hop, for example `wsl -d Ubuntu --`.
 - `remote_connect_timeout_seconds` is an integer connection timeout and
   defaults to `10` seconds when unset.
 
@@ -80,3 +83,24 @@ The profile create and update APIs require `remote_host`, `remote_user`, and
 
 A possible follow-up is adding a test-connection action to the transcription
 profile form; it is not part of the current execution-field UI.
+
+## Remote WhisperX transport contract
+
+Remote WhisperX execution uses Go-native `golang.org/x/crypto/ssh` only. The
+remote contract consists entirely of commands with stdin/stdout streams, so an
+SFTP dependency, an `openssh-client` image addition, and Dockerfile divergence
+are unnecessary. The executor reads the private key from `remote_key_path` at
+job time; key material is never logged or persisted in the database.
+
+The executor submits audio on stdin to one invocation of
+`<prefix> <remote_work_dir>/scriberr-remote-job.sh`, retrieves the wrapper's
+`output` directory as a tar stream from a second SSH exec, and removes
+`<remote_work_dir>/jobs/<job-id>` with a third exec on every success and failure
+path. Retrieved files enter the existing WhisperX output parser unchanged, and
+remote stderr is written to the job's existing `transcription.log`.
+
+Host-key verification uses the first conventional known-hosts file available:
+`~/.ssh/known_hosts`, then `/etc/ssh/ssh_known_hosts`. When neither exists, the
+initial implementation uses `ssh.InsecureIgnoreHostKey`; this is an explicit
+single-user LAN deployment trade-off that avoids requiring new configuration
+before a host-key management UI or setting exists.
