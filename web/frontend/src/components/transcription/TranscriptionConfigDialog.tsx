@@ -75,15 +75,33 @@ export interface WhisperXParams {
     max_new_tokens?: number;
 }
 
+export interface ProfileExecutionSettings {
+    execution_mode: "local" | "remote";
+    remote_host: string;
+    remote_port: number;
+    remote_user: string;
+    remote_key_path: string;
+    remote_work_dir: string;
+    remote_connect_timeout_seconds: number;
+}
+
+export type ProfileFieldErrors = Partial<Record<keyof ProfileExecutionSettings, string>>;
+
+export type ProfileDialogPayload = WhisperXParams & ProfileExecutionSettings & {
+    profileName?: string;
+    profileDescription?: string;
+};
+
 interface TranscriptionConfigDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onStartTranscription: (params: WhisperXParams & { profileName?: string; profileDescription?: string }) => void;
+    onStartTranscription: (params: ProfileDialogPayload) => void | ProfileFieldErrors | Promise<void | ProfileFieldErrors>;
     loading?: boolean;
     isProfileMode?: boolean;
     initialParams?: WhisperXParams;
     initialName?: string;
     initialDescription?: string;
+    initialExecutionSettings?: Partial<ProfileExecutionSettings>;
     isMultiTrack?: boolean;
     title?: string;
 }
@@ -235,12 +253,23 @@ export const TranscriptionConfigDialog = memo(function TranscriptionConfigDialog
     initialParams,
     initialName = "",
     initialDescription = "",
+    initialExecutionSettings,
     isMultiTrack = false,
     title,
 }: TranscriptionConfigDialogProps) {
     const [params, setParams] = useState<WhisperXParams>(DEFAULT_PARAMS);
     const [profileName, setProfileName] = useState("");
     const [profileDescription, setProfileDescription] = useState("");
+    const [executionSettings, setExecutionSettings] = useState<ProfileExecutionSettings>({
+        execution_mode: "local",
+        remote_host: "",
+        remote_port: 22,
+        remote_user: "",
+        remote_key_path: "",
+        remote_work_dir: "",
+        remote_connect_timeout_seconds: 10,
+    });
+    const [profileFieldErrors, setProfileFieldErrors] = useState<ProfileFieldErrors>({});
 
     // OpenAI validation state
     const [isValidating, setIsValidating] = useState(false);
@@ -260,8 +289,23 @@ export const TranscriptionConfigDialog = memo(function TranscriptionConfigDialog
             });
             setProfileName(initialName);
             setProfileDescription(initialDescription);
+            setExecutionSettings({
+                execution_mode: initialExecutionSettings?.execution_mode || "local",
+                remote_host: initialExecutionSettings?.remote_host || "",
+                remote_port: initialExecutionSettings?.remote_port || 22,
+                remote_user: initialExecutionSettings?.remote_user || "",
+                remote_key_path: initialExecutionSettings?.remote_key_path || "",
+                remote_work_dir: initialExecutionSettings?.remote_work_dir || "",
+                remote_connect_timeout_seconds: initialExecutionSettings?.remote_connect_timeout_seconds || 10,
+            });
+            setProfileFieldErrors({});
         }
-    }, [open, initialParams, initialName, initialDescription, isMultiTrack]);
+    }, [open, initialParams, initialName, initialDescription, initialExecutionSettings, isMultiTrack]);
+
+    const updateExecutionSetting = <K extends keyof ProfileExecutionSettings>(key: K, value: ProfileExecutionSettings[K]) => {
+        setExecutionSettings(prev => ({ ...prev, [key]: value }));
+        setProfileFieldErrors(prev => ({ ...prev, [key]: undefined }));
+    };
 
     const updateParam = <K extends keyof WhisperXParams>(key: K, value: WhisperXParams[K]) => {
         setParams(prev => {
@@ -299,11 +343,12 @@ export const TranscriptionConfigDialog = memo(function TranscriptionConfigDialog
         }
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (isProfileMode) {
-            onStartTranscription({ ...params, profileName, profileDescription });
+            const errors = await onStartTranscription({ ...params, ...executionSettings, profileName, profileDescription });
+            setProfileFieldErrors(errors || {});
         } else {
-            onStartTranscription(params);
+            await onStartTranscription(params as ProfileDialogPayload);
         }
     };
 
@@ -358,6 +403,51 @@ export const TranscriptionConfigDialog = memo(function TranscriptionConfigDialog
                                 />
                             </FormField>
                         </div>
+                    )}
+
+                    {isProfileMode && (
+                        <Section title="Execution" description="Choose where this profile runs transcription workloads.">
+                            <SelectField
+                                label="Execution Mode"
+                                value={executionSettings.execution_mode}
+                                onValueChange={(value) => updateExecutionSetting('execution_mode', value as "local" | "remote")}
+                                options={[
+                                    { value: "local", label: "Local" },
+                                    { value: "remote", label: "Remote" },
+                                ]}
+                            />
+
+                            {executionSettings.execution_mode === "remote" && (
+                                <div className="p-4 bg-[var(--bg-main)] rounded-xl border border-[var(--border-subtle)] space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <FormField label="Host" htmlFor="remoteHost">
+                                            <Input id="remoteHost" value={executionSettings.remote_host} onChange={(e) => updateExecutionSetting('remote_host', e.target.value)} placeholder="gpu-host.example" className={inputClassName} />
+                                            {profileFieldErrors.remote_host && <p className="text-sm text-[var(--error)]">{profileFieldErrors.remote_host}</p>}
+                                        </FormField>
+                                        <FormField label="Port" htmlFor="remotePort">
+                                            <Input id="remotePort" type="number" min={1} max={65535} value={executionSettings.remote_port} onChange={(e) => updateExecutionSetting('remote_port', parseInt(e.target.value) || 22)} className={inputClassName} />
+                                            {profileFieldErrors.remote_port && <p className="text-sm text-[var(--error)]">{profileFieldErrors.remote_port}</p>}
+                                        </FormField>
+                                        <FormField label="User" htmlFor="remoteUser">
+                                            <Input id="remoteUser" value={executionSettings.remote_user} onChange={(e) => updateExecutionSetting('remote_user', e.target.value)} placeholder="scriberr" className={inputClassName} />
+                                            {profileFieldErrors.remote_user && <p className="text-sm text-[var(--error)]">{profileFieldErrors.remote_user}</p>}
+                                        </FormField>
+                                        <FormField label="Key Path" htmlFor="remoteKeyPath">
+                                            <Input id="remoteKeyPath" value={executionSettings.remote_key_path} onChange={(e) => updateExecutionSetting('remote_key_path', e.target.value)} placeholder="/etc/scriberr/keys/id_ed25519" className={inputClassName} />
+                                            {profileFieldErrors.remote_key_path && <p className="text-sm text-[var(--error)]">{profileFieldErrors.remote_key_path}</p>}
+                                        </FormField>
+                                        <FormField label="Remote Work Directory" htmlFor="remoteWorkDir" optional>
+                                            <Input id="remoteWorkDir" value={executionSettings.remote_work_dir} onChange={(e) => updateExecutionSetting('remote_work_dir', e.target.value)} placeholder="/srv/scriberr-work" className={inputClassName} />
+                                            {profileFieldErrors.remote_work_dir && <p className="text-sm text-[var(--error)]">{profileFieldErrors.remote_work_dir}</p>}
+                                        </FormField>
+                                        <FormField label="Connect Timeout (seconds)" htmlFor="remoteConnectTimeout">
+                                            <Input id="remoteConnectTimeout" type="number" min={1} value={executionSettings.remote_connect_timeout_seconds} onChange={(e) => updateExecutionSetting('remote_connect_timeout_seconds', parseInt(e.target.value) || 10)} className={inputClassName} />
+                                            {profileFieldErrors.remote_connect_timeout_seconds && <p className="text-sm text-[var(--error)]">{profileFieldErrors.remote_connect_timeout_seconds}</p>}
+                                        </FormField>
+                                    </div>
+                                </div>
+                            )}
+                        </Section>
                     )}
 
                     {/* Model Family Selection */}

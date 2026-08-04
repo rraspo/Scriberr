@@ -3,7 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ProfilesTable } from "./ProfilesTable";
-import { TranscriptionConfigDialog, type WhisperXParams } from "@/components/TranscriptionConfigDialog";
+import {
+	TranscriptionConfigDialog,
+	type ProfileDialogPayload,
+	type ProfileExecutionSettings,
+	type ProfileFieldErrors,
+	type WhisperXParams,
+} from "@/components/TranscriptionConfigDialog";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Settings } from "lucide-react";
@@ -14,6 +20,13 @@ interface TranscriptionProfile {
 	description?: string;
 	is_default: boolean;
 	parameters: WhisperXParams;
+	execution_mode: "local" | "remote";
+	remote_host: string;
+	remote_port: number;
+	remote_user: string;
+	remote_key_path: string;
+	remote_work_dir: string;
+	remote_connect_timeout_seconds: number;
 	created_at: string;
 	updated_at: string;
 }
@@ -167,7 +180,7 @@ export function ProfileSettings() {
 		setProfileDialogOpen(true);
 	}, []);
 
-	const handleProfileSaved = useCallback(async (payload: WhisperXParams & { profileName?: string; profileDescription?: string }) => {
+	const handleProfileSaved = useCallback(async (payload: ProfileDialogPayload): Promise<void | ProfileFieldErrors> => {
 		try {
 			const name = (payload.profileName || "").trim();
 			const description = (payload.profileDescription || "").trim();
@@ -176,12 +189,31 @@ export function ProfileSettings() {
 				return;
 			}
 
-			// eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-			const { profileName: _pn, profileDescription: _pd, ...paramRest } = payload as any;
+			const {
+				profileName: _pn,
+				profileDescription: _pd,
+				execution_mode,
+				remote_host,
+				remote_port,
+				remote_user,
+				remote_key_path,
+				remote_work_dir,
+				remote_connect_timeout_seconds,
+				...paramRest
+			} = payload;
+			void _pn;
+			void _pd;
 			const body = {
 				name,
 				description: description || undefined,
-				parameters: paramRest as WhisperXParams,
+				execution_mode,
+				remote_host,
+				remote_port,
+				remote_user,
+				remote_key_path,
+				remote_work_dir,
+				remote_connect_timeout_seconds,
+				parameters: paramRest,
 			};
 
 			let res: Response;
@@ -205,8 +237,11 @@ export function ProfileSettings() {
 			}
 
 			if (!res.ok) {
-				const text = await res.text();
-				alert(`Failed to save profile: ${res.status} ${text}`);
+				const data = await res.json().catch(() => ({}));
+				const message = typeof data.error === "string" ? data.error : `Failed to save profile (${res.status})`;
+				const field = (Object.keys(body) as (keyof ProfileExecutionSettings)[]).find((key) => message.includes(key));
+				if (field) return { [field]: message };
+				alert(message);
 				return;
 			}
 
@@ -355,6 +390,7 @@ export function ProfileSettings() {
 				initialParams={editingProfile?.parameters}
 				initialName={editingProfile?.name}
 				initialDescription={editingProfile?.description}
+				initialExecutionSettings={editingProfile || undefined}
 			/>
 		</div>
 	);

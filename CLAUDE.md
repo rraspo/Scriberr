@@ -77,3 +77,6 @@ metadata alongside their existing transcription parameters:
 
 The profile create and update APIs require `remote_host`, `remote_user`, and
 `remote_key_path` whenever `execution_mode` is `remote`.
+
+A possible follow-up is adding a test-connection action to the transcription
+profile form; it is not part of the current execution-field UI.

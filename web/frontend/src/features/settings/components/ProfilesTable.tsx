@@ -22,6 +22,13 @@ interface TranscriptionProfile {
 	description?: string;
 	is_default: boolean;
 	parameters: WhisperXParams;
+	execution_mode: "local" | "remote";
+	remote_host: string;
+	remote_port: number;
+	remote_user: string;
+	remote_key_path: string;
+	remote_work_dir: string;
+	remote_connect_timeout_seconds: number;
 	created_at: string;
 	updated_at: string;
 }
