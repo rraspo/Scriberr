@@ -27,6 +27,7 @@ import (
 	"scriberr/pkg/logger"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -2322,9 +2323,17 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	}
 
 	var updatedProfile models.TranscriptionProfile
-	if err := c.ShouldBindJSON(&updatedProfile); err != nil {
+	if err := c.ShouldBindBodyWith(&updatedProfile, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
 		return
+	}
+	var fields map[string]json.RawMessage
+	if err := c.ShouldBindBodyWith(&fields, binding.JSON); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+		return
+	}
+	if _, provided := fields["parameters"]; !provided {
+		updatedProfile.Parameters = existingProfile.Parameters
 	}
 
 	// Validate required fields

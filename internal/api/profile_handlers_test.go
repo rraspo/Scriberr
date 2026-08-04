@@ -155,3 +155,25 @@ func TestUpdateProfileRejectsIncompleteRemoteConnection(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), "remote_host is required")
 }
+
+func TestRemoteProfilePreservesSpeakerCaps(t *testing.T) {
+	handler, _ := newProfileTestHandler(t)
+	created := performProfileRequest(t, http.MethodPost, "/profiles", map[string]any{
+		"name": "Speaker Limits",
+		"parameters": map[string]any{"min_speakers": 2, "max_speakers": 6},
+	}, handler.CreateProfile)
+	require.Equal(t, http.StatusOK, created.Code, created.Body.String())
+	var profile models.TranscriptionProfile
+	require.NoError(t, json.Unmarshal(created.Body.Bytes(), &profile))
+
+	updated := performProfileRequest(t, http.MethodPut, "/profiles/"+profile.ID, map[string]any{
+		"name": "Speaker Limits", "execution_mode": "remote", "remote_host": "gpu-host.example",
+		"remote_user": "scriberr", "remote_key_path": "/etc/scriberr/keys/id_ed25519",
+	}, handler.UpdateProfile)
+	require.Equal(t, http.StatusOK, updated.Code, updated.Body.String())
+	require.NoError(t, json.Unmarshal(updated.Body.Bytes(), &profile))
+	require.NotNil(t, profile.Parameters.MinSpeakers)
+	require.NotNil(t, profile.Parameters.MaxSpeakers)
+	require.Equal(t, 2, *profile.Parameters.MinSpeakers)
+	require.Equal(t, 6, *profile.Parameters.MaxSpeakers)
+}
