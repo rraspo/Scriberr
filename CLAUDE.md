@@ -60,6 +60,12 @@ Do not substitute a local Docker build when the Docker socket is unavailable.
 User-interface copy stays in English to match upstream and keep changes
 straightforward to merge in a pull request.
 
+## Optional authentication disable mode
+
+Set `DISABLE_AUTH` to `1` or `true` to bypass authentication and run every
+request as the single admin user. This is intended only for single-user,
+trusted-LAN deployments and defaults to off.
+
 ## Transcription profile execution fields
 
 Transcription profiles store execution selection and remote SSH connection

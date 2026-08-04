@@ -153,6 +153,27 @@ func (suite *APIHandlerTestSuite) makeAuthenticatedRequest(method, path string, 
 	return w
 }
 
+func (suite *APIHandlerTestSuite) TestUnauthenticatedAPIRequestRejectedByDefault() {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/transcription/list", nil)
+	recorder := httptest.NewRecorder()
+
+	suite.router.ServeHTTP(recorder, req)
+
+	suite.Equal(http.StatusUnauthorized, recorder.Code)
+}
+
+func (suite *APIHandlerTestSuite) TestUnauthenticatedAPIRequestSucceedsWhenAuthDisabled() {
+	suite.helper.Config.DisableAuth = true
+	defer func() { suite.helper.Config.DisableAuth = false }()
+	router := api.SetupRoutes(suite.handler, suite.helper.AuthService)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/transcription/list", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	suite.Equal(http.StatusOK, recorder.Code)
+}
+
 // Test health check endpoint
 func (suite *APIHandlerTestSuite) TestHealthCheck() {
 	w := httptest.NewRecorder()

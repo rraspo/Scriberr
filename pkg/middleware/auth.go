@@ -64,6 +64,16 @@ func AuthMiddleware(authService *auth.AuthService) gin.HandlerFunc {
 	}
 }
 
+// DisabledAuthMiddleware authenticates every request as the configured admin user.
+func DisabledAuthMiddleware(user *models.User) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Set("auth_type", "disabled")
+		c.Set("user_id", user.ID)
+		c.Set("username", user.Username)
+		c.Next()
+	}
+}
+
 // validateAPIKey validates an API key against the database and updates last used timestamp
 func validateAPIKey(key string) bool {
 	var apiKey models.APIKey

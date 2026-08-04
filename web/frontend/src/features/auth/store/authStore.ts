@@ -4,11 +4,13 @@ import { persist } from 'zustand/middleware';
 interface AuthState {
     token: string | null;
     isAuthenticated: boolean;
+    authDisabled: boolean;
     requiresRegistration: boolean;
     isInitialized: boolean;
     setToken: (token: string | null) => void;
     setRequiresRegistration: (requires: boolean) => void;
     setInitialized: (initialized: boolean) => void;
+    setAuthDisabled: (disabled: boolean) => void;
     logout: () => void;
 }
 
@@ -17,11 +19,13 @@ export const useAuthStore = create<AuthState>()(
         (set) => ({
             token: null,
             isAuthenticated: false,
+            authDisabled: false,
             requiresRegistration: false,
             isInitialized: false,
             setToken: (token) => set({ token, isAuthenticated: !!token }),
             setRequiresRegistration: (requires) => set({ requiresRegistration: requires }),
             setInitialized: (initialized) => set({ isInitialized: initialized }),
+            setAuthDisabled: (disabled) => set({ authDisabled: disabled }),
             logout: () => {
                 set({ token: null, isAuthenticated: false });
                 localStorage.removeItem('auth-storage');

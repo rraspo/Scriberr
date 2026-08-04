@@ -1,12 +1,17 @@
 package api
 
 import (
+	"context"
+	"fmt"
+
 	"scriberr/internal/auth"
+	"scriberr/internal/models"
 	"scriberr/internal/web"
 	"scriberr/pkg/logger"
 	"scriberr/pkg/middleware"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // SetupRoutes sets up all API routes
@@ -17,6 +22,17 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 
 	// Create Gin router without default middleware
 	router := gin.New()
+
+	authMiddleware := middleware.AuthMiddleware(authService)
+	jwtOnlyMiddleware := middleware.JWTOnlyMiddleware(authService)
+	if handler.config.DisableAuth {
+		adminUser, err := ensureAuthDisabledAdmin(handler.userRepo)
+		if err != nil {
+			panic(fmt.Sprintf("failed to initialize auth-disabled admin user: %v", err))
+		}
+		authMiddleware = middleware.DisabledAuthMiddleware(adminUser)
+		jwtOnlyMiddleware = middleware.DisabledAuthMiddleware(adminUser)
+	}
 
 	// Add recovery middleware
 	router.Use(gin.Recovery())
@@ -84,7 +100,7 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 			// Account management routes (require authentication)
 			authProtected := auth.Group("")
 			// Account management must require JWT (API keys do not represent a user)
-			authProtected.Use(middleware.JWTOnlyMiddleware(authService))
+			authProtected.Use(jwtOnlyMiddleware)
 			{
 				authProtected.POST("/change-password", handler.ChangePassword)
 				authProtected.POST("/change-username", handler.ChangeUsername)
@@ -107,7 +123,7 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 		// API Key management routes (require authentication)
 		apiKeys := v1.Group("/api-keys")
 		// API key management restricted to JWT-authenticated users
-		apiKeys.Use(middleware.JWTOnlyMiddleware(authService))
+		apiKeys.Use(jwtOnlyMiddleware)
 		{
 			apiKeys.GET("/", handler.ListAPIKeys)
 			apiKeys.POST("/", handler.CreateAPIKey)
@@ -116,7 +132,7 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 
 		// Transcription routes (require authentication)
 		transcription := v1.Group("/transcription")
-		transcription.Use(middleware.AuthMiddleware(authService))
+		transcription.Use(authMiddleware)
 		{
 			// File upload routes - disable compression for these
 			uploadRoutes := transcription.Group("")
@@ -160,7 +176,7 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 
 		// Profile routes (require authentication)
 		profiles := v1.Group("/profiles")
-		profiles.Use(middleware.AuthMiddleware(authService))
+		profiles.Use(authMiddleware)
 		{
 			profiles.GET("/", handler.ListProfiles)
 			profiles.POST("/", handler.CreateProfile)
@@ -172,7 +188,7 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 
 		// User routes (require authentication)
 		user := v1.Group("/user")
-		user.Use(middleware.JWTOnlyMiddleware(authService))
+		user.Use(jwtOnlyMiddleware)
 		{
 			user.GET("/default-profile", handler.GetUserDefaultProfile)
 			user.POST("/default-profile", handler.SetUserDefaultProfile)
@@ -182,7 +198,7 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 
 		// Admin routes (require authentication)
 		admin := v1.Group("/admin")
-		admin.Use(middleware.AuthMiddleware(authService))
+		admin.Use(authMiddleware)
 		{
 			queue := admin.Group("/queue")
 			{
@@ -192,7 +208,7 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 
 		// LLM configuration routes (require authentication)
 		llm := v1.Group("/llm")
-		llm.Use(middleware.AuthMiddleware(authService))
+		llm.Use(authMiddleware)
 		{
 			llm.GET("/config", handler.GetLLMConfig)
 			llm.POST("/config", handler.SaveLLMConfig)
@@ -200,7 +216,7 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 
 		// Summarization templates routes (require authentication)
 		summaries := v1.Group("/summaries")
-		summaries.Use(middleware.AuthMiddleware(authService))
+		summaries.Use(authMiddleware)
 		{
 			summaries.GET("/", handler.ListSummaryTemplates)
 			summaries.POST("/", handler.CreateSummaryTemplate)
@@ -213,7 +229,7 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 
 		// Chat routes (require authentication)
 		chat := v1.Group("/chat")
-		chat.Use(middleware.AuthMiddleware(authService))
+		chat.Use(authMiddleware)
 		{
 			chat.GET("/models", handler.GetChatModels)
 			chat.POST("/sessions", handler.CreateChatSession)
@@ -227,7 +243,7 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 
 		// Notes routes (require authentication)
 		notes := v1.Group("/notes")
-		notes.Use(middleware.AuthMiddleware(authService))
+		notes.Use(authMiddleware)
 		{
 			notes.GET("/:note_id", handler.GetNote)
 			notes.PUT("/:note_id", handler.UpdateNote)
@@ -236,21 +252,21 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 
 		// Summarization route (require authentication)
 		summarize := v1.Group("/summarize")
-		summarize.Use(middleware.AuthMiddleware(authService))
+		summarize.Use(authMiddleware)
 		{
 			summarize.POST("/", handler.Summarize)
 		}
 
 		// Config routes (require authentication)
 		config := v1.Group("/config")
-		config.Use(middleware.AuthMiddleware(authService))
+		config.Use(authMiddleware)
 		{
 			config.POST("/openai/validate", handler.ValidateOpenAIKey)
 		}
 
 		// SSE Events (require authentication)
 		events := v1.Group("/events")
-		events.Use(middleware.AuthMiddleware(authService))
+		events.Use(authMiddleware)
 		{
 			events.GET("/", handler.Events)
 		}
@@ -260,4 +276,27 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 	web.SetupStaticRoutes(router, authService)
 
 	return router
+}
+
+func ensureAuthDisabledAdmin(userRepo interface {
+	List(context.Context, int, int) ([]models.User, int64, error)
+	Create(context.Context, *models.User) error
+}) (*models.User, error) {
+	users, _, err := userRepo.List(context.Background(), 0, 1)
+	if err != nil {
+		return nil, err
+	}
+	if len(users) > 0 {
+		return &users[0], nil
+	}
+
+	password, err := auth.HashPassword(uuid.NewString())
+	if err != nil {
+		return nil, err
+	}
+	user := &models.User{Username: "admin", Password: password}
+	if err := userRepo.Create(context.Background(), user); err != nil {
+		return nil, err
+	}
+	return user, nil
 }

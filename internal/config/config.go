@@ -22,7 +22,8 @@ type Config struct {
 	DatabasePath string
 
 	// JWT configuration
-	JWTSecret string
+	JWTSecret   string
+	DisableAuth bool
 
 	// File storage
 	UploadDir      string
@@ -63,6 +64,7 @@ func Load() *Config {
 		AllowedOrigins: strings.Split(getEnv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8080"), ","),
 		DatabasePath:   getEnv("DATABASE_PATH", "data/scriberr.db"),
 		JWTSecret:      getJWTSecret(),
+		DisableAuth:    isEnabled(getEnv("DISABLE_AUTH", "")),
 		UploadDir:      getEnv("UPLOAD_DIR", "data/uploads"),
 		TranscriptsDir: getEnv("TRANSCRIPTS_DIR", "data/transcripts"),
 		TempDir:        getEnv("TEMP_DIR", "data/temp"),
@@ -71,6 +73,10 @@ func Load() *Config {
 		OpenAIAPIKey:   getEnv("OPENAI_API_KEY", ""),
 		HFToken:        getEnv("HF_TOKEN", ""),
 	}
+}
+
+func isEnabled(value string) bool {
+	return value == "1" || value == "true"
 }
 
 // IsProduction returns true if the environment is production

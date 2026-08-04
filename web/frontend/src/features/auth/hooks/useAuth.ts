@@ -6,15 +6,17 @@ import '../../../lib/authTypes';
 export function useAuth() {
     const {
         token,
+        authDisabled,
         requiresRegistration,
         isInitialized,
         setToken,
         setRequiresRegistration,
         setInitialized,
+        setAuthDisabled,
         logout: storeLogout
     } = useAuthStore();
 
-    const isAuthenticated = !!token;
+    const isAuthenticated = authDisabled || !!token;
 
     const tokenCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -86,12 +88,13 @@ export function useAuth() {
                 const response = await fetch("/api/v1/auth/registration-status");
                 if (response.ok) {
                     const data = await response.json();
+                    setAuthDisabled(data.auth_disabled === true);
                     const regEnabled = typeof data.registration_enabled === 'boolean'
                         ? data.registration_enabled
                         : !!data.requiresRegistration;
                     setRequiresRegistration(regEnabled);
 
-                    if (!regEnabled && token && isTokenExpired(token)) {
+                    if (!data.auth_disabled && !regEnabled && token && isTokenExpired(token)) {
                         const newToken = await refreshToken();
                         if (!newToken) {
                             logout();
@@ -105,7 +108,7 @@ export function useAuth() {
             }
         };
         initializeAuth();
-    }, [isInitialized, setRequiresRegistration, setInitialized, token, isTokenExpired, logout]);
+    }, [isInitialized, setRequiresRegistration, setInitialized, setAuthDisabled, token, isTokenExpired, logout]);
 
     return {
         token,

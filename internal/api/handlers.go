@@ -133,6 +133,7 @@ type RegisterRequest struct {
 type RegistrationStatusResponse struct {
 	// Match tests expecting snake_case key
 	RegistrationEnabled bool `json:"registration_enabled"`
+	AuthDisabled        bool `json:"auth_disabled,omitempty"`
 }
 
 // ChangePasswordRequest represents the change password request
@@ -1630,7 +1631,8 @@ func (h *Handler) GetRegistrationStatus(c *gin.Context) {
 	}
 
 	response := RegistrationStatusResponse{
-		RegistrationEnabled: userCount == 0,
+		RegistrationEnabled: userCount == 0 && !h.config.DisableAuth,
+		AuthDisabled:        h.config.DisableAuth,
 	}
 
 	c.JSON(http.StatusOK, response)
