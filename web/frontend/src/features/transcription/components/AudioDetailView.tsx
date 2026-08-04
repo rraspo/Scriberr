@@ -265,6 +265,18 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                         </Tooltip>
                                                     )}
                                                 </div>
+                                                {audioFile.execution_path && audioFile.execution_path !== "local" && (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span className="cursor-help rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 text-[10px] text-[var(--text-secondary)]">
+                                                                {audioFile.execution_path === "remote" ? "Remote" : "Local fallback"}
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            {audioFile.execution_reason || (audioFile.execution_path === "remote" ? "Executed remotely" : "Remote execution was unavailable")}
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                )}
                                             </div>
                                         </div>
 

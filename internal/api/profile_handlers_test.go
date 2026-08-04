@@ -159,7 +159,7 @@ func TestUpdateProfileRejectsIncompleteRemoteConnection(t *testing.T) {
 func TestRemoteProfilePreservesSpeakerCaps(t *testing.T) {
 	handler, _ := newProfileTestHandler(t)
 	created := performProfileRequest(t, http.MethodPost, "/profiles", map[string]any{
-		"name": "Speaker Limits",
+		"name":       "Speaker Limits",
 		"parameters": map[string]any{"min_speakers": 2, "max_speakers": 6},
 	}, handler.CreateProfile)
 	require.Equal(t, http.StatusOK, created.Code, created.Body.String())

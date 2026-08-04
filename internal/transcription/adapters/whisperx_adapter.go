@@ -21,6 +21,7 @@ type WhisperXAdapter struct {
 	*BaseAdapter
 	envPath                string
 	remoteTransportFactory func(models.ProfileExecution) (RemoteTransport, error)
+	localFallback          func(context.Context, interfaces.AudioInput, map[string]interface{}, interfaces.ProcessingContext) (*interfaces.TranscriptResult, error)
 }
 
 // NewWhisperXAdapter creates a new WhisperX adapter
@@ -421,16 +422,32 @@ func (w *WhisperXAdapter) Transcribe(ctx context.Context, input interfaces.Audio
 		}
 		executor := NewRemoteWhisperXExecutor(transport, procCtx.Execution)
 		if err := executor.Execute(ctx, procCtx.JobID, input.FilePath, params, tempDir, filepath.Join(procCtx.OutputDirectory, "transcription.log")); err != nil {
-			return nil, fmt.Errorf("WhisperX remote execution failed: %w", err)
+			decision := classifyRemoteFailure(err)
+			if !decision.Fallback {
+				recordExecutionPath(procCtx, "remote", decision.Reason)
+				return nil, fmt.Errorf("WhisperX remote execution failed: %w", err)
+			}
+			logger.Warn("Remote WhisperX unavailable; falling back to local CPU execution",
+				"host", procCtx.Execution.RemoteHost, "port", procCtx.Execution.RemotePort)
+			recordExecutionPath(procCtx, "local-fallback", decision.Reason)
+			procCtx.Execution.Mode = "local"
+			params = localCPUParameters(params)
+			if w.localFallback != nil {
+				return w.localFallback(ctx, input, params, procCtx)
+			}
+		} else {
+			recordExecutionPath(procCtx, "remote", "")
+			result, err := w.parseResult(tempDir, input, params)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse result: %w", err)
+			}
+			result.ProcessingTime = time.Since(startTime)
+			result.ModelUsed = w.GetStringParameter(params, "model")
+			result.Metadata = w.CreateDefaultMetadata(params)
+			return result, nil
 		}
-		result, err := w.parseResult(tempDir, input, params)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse result: %w", err)
-		}
-		result.ProcessingTime = time.Since(startTime)
-		result.ModelUsed = w.GetStringParameter(params, "model")
-		result.Metadata = w.CreateDefaultMetadata(params)
-		return result, nil
+	} else {
+		recordExecutionPath(procCtx, "local", "")
 	}
 
 	// Build WhisperX command
@@ -512,6 +529,22 @@ func (w *WhisperXAdapter) Transcribe(ctx context.Context, input interfaces.Audio
 		"processing_time", result.ProcessingTime)
 
 	return result, nil
+}
+
+func localCPUParameters(params map[string]interface{}) map[string]interface{} {
+	localParams := make(map[string]interface{}, len(params))
+	for key, value := range params {
+		localParams[key] = value
+	}
+	localParams["device"] = "cpu"
+	localParams["compute_type"] = "float32"
+	return localParams
+}
+
+func recordExecutionPath(procCtx interfaces.ProcessingContext, path, reason string) {
+	if procCtx.RecordExecutionPath != nil {
+		procCtx.RecordExecutionPath(path, reason)
+	}
 }
 
 // buildWhisperXArgs builds the command arguments for WhisperX

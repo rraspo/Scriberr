@@ -115,6 +115,11 @@ func (m *MockJobRepository) UpdateError(ctx context.Context, jobID string, error
 	return args.Error(0)
 }
 
+func (m *MockJobRepository) UpdateExecutionPath(ctx context.Context, jobID, path, reason string) error {
+	args := m.Called(ctx, jobID, path, reason)
+	return args.Error(0)
+}
+
 func (m *MockJobRepository) FindByStatus(ctx context.Context, status models.JobStatus) ([]models.TranscriptionJob, error) {
 	args := m.Called(ctx, status)
 	if args.Get(0) == nil {

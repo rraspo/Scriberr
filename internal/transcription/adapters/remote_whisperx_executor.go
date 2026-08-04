@@ -25,10 +25,52 @@ type RemoteTransport interface {
 	Exec(ctx context.Context, command string, stdin io.Reader, stdout, stderr io.Writer) error
 }
 
-// RemoteFailure preserves the failing stage for SCRI-08 without implementing fallback.
+// RemoteFailure preserves the failing stage for fallback classification.
 type RemoteFailure struct {
 	Stage string
 	Err   error
+}
+
+type remoteFailureDecision struct {
+	Fallback bool
+	Reason   string
+}
+
+type remoteExitStatusError interface {
+	ExitStatus() int
+}
+
+func classifyRemoteFailure(err error) remoteFailureDecision {
+	var remoteFailure *RemoteFailure
+	if !errors.As(err, &remoteFailure) {
+		return remoteFailureDecision{Reason: "remote execution failed"}
+	}
+	var exitError remoteExitStatusError
+	if errors.As(remoteFailure.Err, &exitError) {
+		if exitError.ExitStatus() == 127 {
+			return remoteFailureDecision{Fallback: true, Reason: "remote wrapper not found"}
+		}
+		return remoteFailureDecision{Reason: fmt.Sprintf("remote wrapper exited with status %d", exitError.ExitStatus())}
+	}
+	if errors.Is(remoteFailure.Err, context.DeadlineExceeded) {
+		return remoteFailureDecision{Fallback: true, Reason: "remote connection timed out"}
+	}
+	var dnsError *net.DNSError
+	if errors.As(remoteFailure.Err, &dnsError) {
+		return remoteFailureDecision{Fallback: true, Reason: "remote host lookup failed"}
+	}
+	var networkError net.Error
+	if errors.As(remoteFailure.Err, &networkError) {
+		if networkError.Timeout() {
+			return remoteFailureDecision{Fallback: true, Reason: "remote connection timed out"}
+		}
+		return remoteFailureDecision{Fallback: true, Reason: "remote connection failed"}
+	}
+	message := strings.ToLower(remoteFailure.Err.Error())
+	if strings.Contains(message, "unable to authenticate") || strings.Contains(message, "no supported methods remain") {
+		return remoteFailureDecision{Fallback: true, Reason: "remote authentication failed"}
+	}
+	return remoteFailureDecision{Reason: "remote execution failed"}
 }
 
 func (e *RemoteFailure) Error() string { return fmt.Sprintf("remote %s failed: %v", e.Stage, e.Err) }
@@ -51,7 +93,11 @@ func (e *RemoteWhisperXExecutor) Execute(ctx context.Context, jobID, audioPath s
 	defer logFile.Close()
 
 	jobDir := filepath.ToSlash(filepath.Join(e.profile.RemoteWorkDir, "jobs", jobID))
+	shouldCleanup := false
 	defer func() {
+		if !shouldCleanup {
+			return
+		}
 		cleanupErr := e.transport.Exec(context.WithoutCancel(ctx), e.withPrefix("rm -r -- "+shellArg(jobDir)), nil, nil, logFile)
 		if cleanupErr != nil && retErr == nil {
 			retErr = &RemoteFailure{Stage: "cleanup", Err: cleanupErr}
@@ -64,8 +110,11 @@ func (e *RemoteWhisperXExecutor) Execute(ctx context.Context, jobID, audioPath s
 	}
 	defer audio.Close()
 	if err := e.transport.Exec(ctx, e.submitCommand(jobID, params), audio, logFile, logFile); err != nil {
-		return &RemoteFailure{Stage: "submit", Err: err}
+		failure := &RemoteFailure{Stage: "submit", Err: err}
+		shouldCleanup = !classifyRemoteFailure(failure).Fallback
+		return failure
 	}
+	shouldCleanup = true
 
 	var archive bytes.Buffer
 	retrieve := e.withPrefix("tar -C " + shellArg(jobDir) + " -cf - output")
@@ -199,17 +248,14 @@ func (t *sshTransport) Exec(ctx context.Context, command string, stdin io.Reader
 	if err != nil {
 		return err
 	}
-	timeout := time.Duration(t.profile.ConnectTimeoutSeconds) * time.Second
-	if timeout <= 0 {
-		timeout = 10 * time.Second
-	}
+	timeout := t.connectTimeout()
 	port := t.profile.RemotePort
 	if port == 0 {
 		port = 22
 	}
 	config := &ssh.ClientConfig{User: t.profile.RemoteUser, Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)}, HostKeyCallback: hostKeyCallback, Timeout: timeout}
 	address := net.JoinHostPort(t.profile.RemoteHost, strconv.Itoa(port))
-	conn, err := (&net.Dialer{Timeout: timeout}).DialContext(ctx, "tcp", address)
+	conn, err := t.dial(ctx, address, timeout)
 	if err != nil {
 		return err
 	}
@@ -236,6 +282,18 @@ func (t *sshTransport) Exec(ctx context.Context, command string, stdin io.Reader
 		<-done
 		return ctx.Err()
 	}
+}
+
+func (t *sshTransport) dial(ctx context.Context, address string, timeout time.Duration) (net.Conn, error) {
+	return (&net.Dialer{Timeout: timeout}).DialContext(ctx, "tcp", address)
+}
+
+func (t *sshTransport) connectTimeout() time.Duration {
+	timeout := time.Duration(t.profile.ConnectTimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		return 10 * time.Second
+	}
+	return timeout
 }
 
 func conventionalHostKeyCallback() (ssh.HostKeyCallback, error) {

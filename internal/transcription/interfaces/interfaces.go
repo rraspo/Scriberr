@@ -105,12 +105,13 @@ type DiarizationResult struct {
 
 // ProcessingContext contains context information for processing
 type ProcessingContext struct {
-	JobID           string                  `json:"job_id"`
-	UserID          *string                 `json:"user_id,omitempty"`
-	OutputDirectory string                  `json:"output_directory"`
-	TempDirectory   string                  `json:"temp_directory"`
-	Metadata        map[string]string       `json:"metadata"`
-	Execution       models.ProfileExecution `json:"execution"`
+	JobID               string                    `json:"job_id"`
+	UserID              *string                   `json:"user_id,omitempty"`
+	OutputDirectory     string                    `json:"output_directory"`
+	TempDirectory       string                    `json:"temp_directory"`
+	Metadata            map[string]string         `json:"metadata"`
+	Execution           models.ProfileExecution   `json:"execution"`
+	RecordExecutionPath func(path, reason string) `json:"-"`
 }
 
 // ModelAdapter is the base interface that all model adapters must implement

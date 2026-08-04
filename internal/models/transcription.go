@@ -17,6 +17,8 @@ type TranscriptionJob struct {
 	Diarization           bool           `json:"diarization" gorm:"type:boolean;default:false"`
 	Summary               *string        `json:"summary,omitempty" gorm:"type:text"`
 	ErrorMessage          *string        `json:"error_message,omitempty" gorm:"type:text"`
+	ExecutionPath         string         `json:"execution_path" gorm:"type:text;not null;default:'local'"`
+	ExecutionReason       string         `json:"execution_reason" gorm:"type:text"`
 	IsMultiTrack          bool           `json:"is_multi_track" gorm:"type:boolean;default:false"`
 	AupFilePath           *string        `json:"aup_file_path,omitempty" gorm:"type:text"`
 	MultiTrackFolder      *string        `json:"multi_track_folder,omitempty" gorm:"type:text"`

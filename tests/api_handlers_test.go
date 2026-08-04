@@ -382,6 +382,9 @@ func (suite *APIHandlerTestSuite) TestListTranscriptionJobsDeltaSync() {
 // Test getting transcription job by ID
 func (suite *APIHandlerTestSuite) TestGetTranscriptionJobByID() {
 	testJob := suite.helper.CreateTestTranscriptionJob(suite.T(), "Test Job by ID")
+	assert.NoError(suite.T(), suite.helper.DB.Model(testJob).Updates(map[string]interface{}{
+		"execution_path": "local-fallback", "execution_reason": "remote connection failed",
+	}).Error)
 
 	w := suite.makeAuthenticatedRequest("GET", fmt.Sprintf("/api/v1/transcription/%s", testJob.ID), nil, false)
 	assert.Equal(suite.T(), 200, w.Code)
@@ -391,6 +394,8 @@ func (suite *APIHandlerTestSuite) TestGetTranscriptionJobByID() {
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), testJob.ID, response.ID)
 	assert.Equal(suite.T(), *testJob.Title, *response.Title)
+	assert.Equal(suite.T(), "local-fallback", response.ExecutionPath)
+	assert.Equal(suite.T(), "remote connection failed", response.ExecutionReason)
 }
 
 // Test getting job status

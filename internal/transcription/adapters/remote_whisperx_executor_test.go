@@ -5,11 +5,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"scriberr/internal/models"
 	"scriberr/internal/transcription/interfaces"
@@ -26,6 +29,105 @@ type fakeRemoteTransport struct {
 	calls      []transportCall
 	tarData    []byte
 	failOnCall int
+	err        error
+}
+
+type exitStatusError int
+
+func (e exitStatusError) Error() string   { return "remote command failed" }
+func (e exitStatusError) ExitStatus() int { return int(e) }
+
+func TestClassifyRemoteFailure(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		fallback bool
+	}{
+		{name: "connection refused", err: &RemoteFailure{Stage: "submit", Err: &net.OpError{Op: "dial", Err: errors.New("connection refused")}}, fallback: true},
+		{name: "DNS failure", err: &RemoteFailure{Stage: "submit", Err: &net.DNSError{Err: "no such host", Name: "gpu-host.example"}}, fallback: true},
+		{name: "auth failure", err: &RemoteFailure{Stage: "submit", Err: errors.New("ssh: handshake failed: unable to authenticate")}, fallback: true},
+		{name: "connect timeout", err: &RemoteFailure{Stage: "submit", Err: context.DeadlineExceeded}, fallback: true},
+		{name: "wrapper not found", err: &RemoteFailure{Stage: "submit", Err: exitStatusError(127)}, fallback: true},
+		{name: "wrapper input error", err: &RemoteFailure{Stage: "submit", Err: exitStatusError(2)}},
+		{name: "wrapper transcription error", err: &RemoteFailure{Stage: "submit", Err: exitStatusError(3)}},
+		{name: "wrapper packaging error", err: &RemoteFailure{Stage: "submit", Err: exitStatusError(4)}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			decision := classifyRemoteFailure(test.err)
+			require.Equal(t, test.fallback, decision.Fallback)
+			require.NotEmpty(t, decision.Reason)
+		})
+	}
+}
+
+func TestRemoteUnavailableFallsBackToLocal(t *testing.T) {
+	root := t.TempDir()
+	audioPath := filepath.Join(root, "audio.wav")
+	require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0644))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := listener.Addr().(*net.TCPAddr).Port
+	require.NoError(t, listener.Close())
+	adapter := NewWhisperXAdapter(root)
+	adapter.remoteTransportFactory = func(models.ProfileExecution) (RemoteTransport, error) {
+		return &dialFailureTransport{address: net.JoinHostPort("127.0.0.1", fmt.Sprint(port))}, nil
+	}
+	adapter.localFallback = func(_ context.Context, _ interfaces.AudioInput, params map[string]interface{}, _ interfaces.ProcessingContext) (*interfaces.TranscriptResult, error) {
+		require.Equal(t, "cpu", params["device"])
+		require.Equal(t, "float32", params["compute_type"])
+		return &interfaces.TranscriptResult{Text: "local transcript"}, nil
+	}
+	var path, reason string
+	result, err := adapter.Transcribe(context.Background(), interfaces.AudioInput{FilePath: audioPath, Format: "wav", Size: 5},
+		map[string]interface{}{"model": "small", "device": "cuda", "compute_type": "float16"}, interfaces.ProcessingContext{JobID: "fallback-job", OutputDirectory: root,
+			Execution:           models.ProfileExecution{Mode: "remote", RemoteHost: "127.0.0.1", RemotePort: port},
+			RecordExecutionPath: func(executedPath, executedReason string) { path, reason = executedPath, executedReason }})
+	require.NoError(t, err)
+	require.Equal(t, "local transcript", result.Text)
+	require.Equal(t, "local-fallback", path)
+	require.NotEmpty(t, reason)
+}
+
+func TestRemoteWrapperFailureDoesNotFallBack(t *testing.T) {
+	root := t.TempDir()
+	audioPath := filepath.Join(root, "audio.wav")
+	require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0644))
+	transport := &fakeRemoteTransport{}
+	transport.err = exitStatusError(4)
+	adapter := NewWhisperXAdapter(root)
+	adapter.remoteTransportFactory = func(models.ProfileExecution) (RemoteTransport, error) { return transport, nil }
+	localAttempted := false
+	adapter.localFallback = func(context.Context, interfaces.AudioInput, map[string]interface{}, interfaces.ProcessingContext) (*interfaces.TranscriptResult, error) {
+		localAttempted = true
+		return nil, nil
+	}
+	var path string
+	_, err := adapter.Transcribe(context.Background(), interfaces.AudioInput{FilePath: audioPath, Format: "wav", Size: 5},
+		map[string]interface{}{"model": "small"}, interfaces.ProcessingContext{JobID: "failed-job", OutputDirectory: root,
+			Execution:           models.ProfileExecution{Mode: "remote", RemoteWorkDir: "/srv/scriberr-work"},
+			RecordExecutionPath: func(executedPath, _ string) { path = executedPath }})
+	require.Error(t, err)
+	require.False(t, localAttempted)
+	require.Equal(t, "remote", path)
+}
+
+func TestSSHTransportHonorsConnectTimeout(t *testing.T) {
+	transport := &sshTransport{profile: models.ProfileExecution{RemoteHost: "10.255.255.1", RemotePort: 22, ConnectTimeoutSeconds: 1}}
+	start := time.Now()
+	_, err := transport.dial(context.Background(), "10.255.255.1:22", transport.connectTimeout())
+	require.Error(t, err)
+	require.Less(t, time.Since(start), 2*time.Second)
+}
+
+type dialFailureTransport struct{ address string }
+
+func (t *dialFailureTransport) Exec(ctx context.Context, _ string, _ io.Reader, _, _ io.Writer) error {
+	conn, err := (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "tcp", t.address)
+	if conn != nil {
+		_ = conn.Close()
+	}
+	return err
 }
 
 func (f *fakeRemoteTransport) Exec(_ context.Context, command string, stdin io.Reader, stdout, _ io.Writer) error {
@@ -35,6 +137,9 @@ func (f *fakeRemoteTransport) Exec(_ context.Context, command string, stdin io.R
 		call.stdin = string(data)
 	}
 	f.calls = append(f.calls, call)
+	if f.err != nil {
+		return f.err
+	}
 	if f.failOnCall == len(f.calls) {
 		return errors.New("remote test failure")
 	}

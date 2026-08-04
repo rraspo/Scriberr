@@ -30,6 +30,15 @@ type legacyProfileBytes struct {
 	MaxSpeakers string
 }
 
+type legacyTranscriptionJob struct {
+	ID        string `gorm:"primaryKey;type:varchar(36)"`
+	AudioPath string `gorm:"type:text;not null"`
+}
+
+func (legacyTranscriptionJob) TableName() string {
+	return "transcription_jobs"
+}
+
 func (legacyTranscriptionProfile) TableName() string {
 	return "transcription_profiles"
 }
@@ -82,4 +91,17 @@ func TestTranscriptionProfileMigrationPreservesExistingFields(t *testing.T) {
 	require.NoError(t, db.Raw(storedBytesQuery, legacy.ID).Scan(&after).Error)
 
 	require.Equal(t, before, after)
+}
+
+func TestTranscriptionJobMigrationAddsExecutionPathFields(t *testing.T) {
+	db := openMigrationTestDB(t)
+	require.NoError(t, db.AutoMigrate(&legacyTranscriptionJob{}))
+	require.NoError(t, db.Create(&legacyTranscriptionJob{ID: "legacy-job", AudioPath: "audio.wav"}).Error)
+
+	require.NoError(t, db.AutoMigrate(&models.TranscriptionJob{}))
+
+	var job models.TranscriptionJob
+	require.NoError(t, db.First(&job, "id = ?", "legacy-job").Error)
+	require.Equal(t, "local", job.ExecutionPath)
+	require.Empty(t, job.ExecutionReason)
 }

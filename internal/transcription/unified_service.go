@@ -220,6 +220,11 @@ func (u *UnifiedTranscriptionService) processSingleTrackJob(ctx context.Context,
 		TempDirectory:   u.tempDirectory,
 		Metadata:        map[string]string{},
 		Execution:       job.Execution,
+		RecordExecutionPath: func(path, reason string) {
+			if err := u.jobRepo.UpdateExecutionPath(context.Background(), job.ID, path, reason); err != nil {
+				logger.Error("Failed to persist job execution path", "job_id", job.ID, "error", err)
+			}
+		},
 	}
 
 	// Create output directory

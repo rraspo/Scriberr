@@ -55,6 +55,8 @@ export interface AudioFile {
     created_at: string;
     audio_path: string;
     diarization?: boolean;
+    execution_path?: "remote" | "local" | "local-fallback";
+    execution_reason?: string;
     is_multi_track?: boolean;
     multi_track_files?: MultiTrackFile[];
     merged_audio_path?: string;

@@ -105,3 +105,14 @@ Host-key verification uses the first conventional known-hosts file available:
 initial implementation uses `ssh.InsecureIgnoreHostKey`; this is an explicit
 single-user LAN deployment trade-off that avoids requiring new configuration
 before a host-key management UI or setting exists.
+
+Remote execution falls back to local CPU only when the remote service is
+unavailable: connection refusal, host lookup failure, SSH authentication
+failure, connection timeout, or a missing remote wrapper (exit status 127).
+Once the wrapper runs, its job-level exit statuses 2, 3, and 4 fail the job
+without local fallback so configuration and transcription errors stay visible.
+
+Each transcription job stores `execution_path` as `remote`, `local`, or
+`local-fallback`, plus a short `execution_reason`. Both fields are returned by
+the job API. The job view displays a badge for remote and fallback execution;
+plain local execution remains visually unchanged.

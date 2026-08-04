@@ -33,7 +33,7 @@ func (suite *TranscriptionServiceTestSuite) SetupSuite() {
 	assert.NoError(suite.T(), err)
 
 	// Set path to sample audio file
-	suite.sampleAudioPath = "/Users/richandrasekaran/Code/machy/Scriberr/samples/jfk.wav"
+	suite.sampleAudioPath = "/srv/scriberr/samples/jfk.wav"
 
 	// Verify sample file exists
 	_, err = os.Stat(suite.sampleAudioPath)
