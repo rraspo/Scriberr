@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { RemoteExecutionToggle } from "@/components/RemoteExecutionToggle";
 import { AudioFilesTable } from "./AudioFilesTable";
 import { DragDropOverlay } from "@/components/DragDropOverlay";
 import { Progress } from "@/components/ui/progress";
@@ -137,7 +138,10 @@ export function Dashboard() {
 			className="min-h-screen bg-[var(--bg-main)]"
 			header={<Header />}
 		>
-			{/* Upload Progress */}
+			{/* Toolbar (execution controls) */}
+			<div className="flex justify-end mb-4">
+				<RemoteExecutionToggle />
+			</div>
 
 			{/* Upload Progress */}
 			{uploadProgress.length > 0 && (
