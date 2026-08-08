@@ -997,8 +997,31 @@ func (h *Handler) StartTranscription(c *gin.Context) {
 		return
 	}
 
+	// Snapshot execution settings from the selected profile; custom-parameter
+	// starts run locally.
+	execution := models.ProfileExecution{Mode: "local", RemotePort: 22, ConnectTimeoutSeconds: 10}
+	if profileID := c.Query("profile_id"); profileID != "" {
+		profile, err := h.profileRepo.FindByID(c.Request.Context(), profileID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Unknown transcription profile"})
+			return
+		}
+		execution = profileExecutionSnapshot(profile)
+	}
+
+	// Remote execution can only come from a profile; the override exists so the
+	// UI can force a remote profile to run locally (e.g. GPU host offline).
+	if override := c.Query("execution_mode"); override != "" {
+		if override != "local" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "execution_mode override only accepts 'local'"})
+			return
+		}
+		execution.Mode = "local"
+	}
+
 	// Update job with parameters
 	job.Parameters = *requestParams
+	job.Execution = execution
 	job.Diarization = requestParams.Diarize
 	job.Status = models.StatusPending
 
