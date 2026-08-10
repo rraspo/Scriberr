@@ -47,6 +47,7 @@ const JobStatusMonitor = memo(function JobStatusMonitor({ jobId }: { jobId: stri
 
 
 import { DebouncedSearchInput } from "@/components/DebouncedSearchInput";
+import { RemoteExecutionToggle } from "@/components/RemoteExecutionToggle";
 import { SwipeableItem } from "@/components/ui/swipeable-item";
 import { useSwipeHint } from "@/hooks/use-swipe-hint";
 
@@ -747,6 +748,7 @@ export const AudioFilesTable = memo(function AudioFilesTable({
 					onChange={(value) => setGlobalFilter(String(value))}
 					className="w-full sm:w-80 shadow-sm border-transparent focus:border-[var(--brand-solid)] bg-white dark:bg-zinc-900"
 				/>
+				<RemoteExecutionToggle />
 			</div>
 
 			{/* List Container */}
