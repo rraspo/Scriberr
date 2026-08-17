@@ -259,7 +259,7 @@ func (r *apiKeyRepository) Revoke(ctx context.Context, id uint) error {
 type ProfileRepository interface {
 	Repository[models.TranscriptionProfile]
 	FindDefault(ctx context.Context) (*models.TranscriptionProfile, error)
-	FindFallback(ctx context.Context) (*models.TranscriptionProfile, error)
+	FindFallbacks(ctx context.Context) ([]models.TranscriptionProfile, error)
 	FindByName(ctx context.Context, name string) (*models.TranscriptionProfile, error)
 }
 
@@ -282,15 +282,16 @@ func (r *profileRepository) FindDefault(ctx context.Context) (*models.Transcript
 	return &profile, nil
 }
 
-// FindFallback returns the profile flagged as the CPU fallback, used when a
-// remote profile's GPU host is unreachable.
-func (r *profileRepository) FindFallback(ctx context.Context) (*models.TranscriptionProfile, error) {
-	var profile models.TranscriptionProfile
-	err := r.db.WithContext(ctx).Where("is_fallback = ?", true).First(&profile).Error
+// FindFallbacks returns every profile flagged as a CPU fallback, used when a
+// remote profile's GPU host is unreachable. More than one may exist so the
+// caller can pick the one matching the job's language.
+func (r *profileRepository) FindFallbacks(ctx context.Context) ([]models.TranscriptionProfile, error) {
+	var profiles []models.TranscriptionProfile
+	err := r.db.WithContext(ctx).Where("is_fallback = ?", true).Order("name asc").Find(&profiles).Error
 	if err != nil {
 		return nil, err
 	}
-	return &profile, nil
+	return profiles, nil
 }
 
 func (r *profileRepository) FindByName(ctx context.Context, name string) (*models.TranscriptionProfile, error) {

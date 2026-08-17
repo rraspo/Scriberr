@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { AudioFilesTable } from "./AudioFilesTable";
+import { AutoTranscribeNotice } from "./AutoTranscribeNotice";
 import { DragDropOverlay } from "@/components/DragDropOverlay";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -200,6 +201,8 @@ export function Dashboard() {
 					</div>
 				</div>
 			)}
+
+			<AutoTranscribeNotice />
 
 			<AudioFilesTable
 				onTranscribe={handleTranscribe}

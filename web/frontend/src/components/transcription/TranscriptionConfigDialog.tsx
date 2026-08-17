@@ -428,7 +428,8 @@ export const TranscriptionConfigDialog = memo(function TranscriptionConfigDialog
                             />
                             <p className="text-xs text-[var(--text-tertiary)] -mt-2">
                                 When a remote profile cannot reach its GPU host, the job re-runs on CPU with this
-                                profile's settings instead of its own. Only one profile can hold this role.
+                                profile's settings instead of its own. Flag one per language and the closest match
+                                to the job's language is used.
                             </p>
 
                             {executionSettings.execution_mode === "remote" && (

@@ -84,18 +84,46 @@ func (u *UnifiedTranscriptionService) SetProfileRepository(repo repository.Profi
 	u.profileRepo = repo
 }
 
-// resolveFallbackParameters returns the parameters of the profile flagged
-// is_fallback, or nil when none is configured. A missing fallback profile is
-// normal, not an error: the job then falls back on its own parameters.
-func (u *UnifiedTranscriptionService) resolveFallbackParameters(ctx context.Context) map[string]interface{} {
+// resolveFallbackParameters returns the parameters of the CPU fallback profile
+// best matching the job's language, or nil when none is configured. A missing
+// fallback profile is normal, not an error: the job then falls back on its own
+// parameters. When no flagged profile matches the language, the first is used
+// but the job's own language is kept — a small model in the right language
+// beats a large one in the wrong one.
+func (u *UnifiedTranscriptionService) resolveFallbackParameters(ctx context.Context, jobLanguage *string) map[string]interface{} {
 	if u.profileRepo == nil {
 		return nil
 	}
-	profile, err := u.profileRepo.FindFallback(ctx)
-	if err != nil || profile == nil {
+	candidates, err := u.profileRepo.FindFallbacks(ctx)
+	if err != nil || len(candidates) == 0 {
 		return nil
 	}
-	return u.convertToWhisperXParams(profile.Parameters)
+
+	wanted := ""
+	if jobLanguage != nil {
+		wanted = strings.TrimSpace(*jobLanguage)
+	}
+
+	chosen := &candidates[0]
+	matched := false
+	if wanted != "" {
+		for i := range candidates {
+			language := candidates[i].Parameters.Language
+			if language != nil && strings.EqualFold(strings.TrimSpace(*language), wanted) {
+				chosen = &candidates[i]
+				matched = true
+				break
+			}
+		}
+	}
+
+	params := u.convertToWhisperXParams(chosen.Parameters)
+	if !matched && wanted != "" {
+		params["language"] = wanted
+	}
+	logger.Info("Resolved CPU fallback profile",
+		"profile", chosen.Name, "job_language", wanted, "language_matched", matched)
+	return params
 }
 
 // Initialize prepares all registered models for use
@@ -248,7 +276,7 @@ func (u *UnifiedTranscriptionService) processSingleTrackJob(ctx context.Context,
 		},
 	}
 	if job.Execution.Mode == "remote" {
-		procCtx.FallbackParameters = u.resolveFallbackParameters(ctx)
+		procCtx.FallbackParameters = u.resolveFallbackParameters(ctx, job.Parameters.Language)
 	}
 
 	// Create output directory
