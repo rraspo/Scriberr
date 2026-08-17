@@ -529,6 +529,33 @@ func (b *BaseAdapter) LogProcessingStart(input interfaces.AudioInput, procCtx in
 		"audio_size", input.Size)
 }
 
+// secretArgFlags are command-line flags whose value must never reach the logs.
+var secretArgFlags = map[string]bool{
+	"--hf_token": true,
+	"--hf-token": true,
+	"--api_key":  true,
+	"--api-key":  true,
+	"--token":    true,
+}
+
+// RedactedCommand joins args into a loggable command line, masking the value of
+// every flag in secretArgFlags. Adapters hand credentials to their Python
+// entrypoints as flag values, so a raw arg slice must never be logged directly.
+func RedactedCommand(args []string) string {
+	redacted := make([]string, len(args))
+	copy(redacted, args)
+	for i, arg := range redacted {
+		if secretArgFlags[arg] && i+1 < len(redacted) {
+			redacted[i+1] = "***"
+			continue
+		}
+		if equals := strings.Index(arg, "="); equals > 0 && secretArgFlags[arg[:equals]] {
+			redacted[i] = arg[:equals] + "=***"
+		}
+	}
+	return strings.Join(redacted, " ")
+}
+
 // LogProcessingEnd logs the end of processing
 func (b *BaseAdapter) LogProcessingEnd(procCtx interfaces.ProcessingContext, processingTime time.Duration, err error) {
 	if err != nil {

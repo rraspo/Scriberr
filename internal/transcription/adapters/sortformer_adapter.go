@@ -337,7 +337,7 @@ func (s *SortformerAdapter) Diarize(ctx context.Context, input interfaces.AudioI
 		cmd.Stderr = logFile
 	}
 
-	logger.Info("Executing Sortformer command", "args", strings.Join(args, " "))
+	logger.Info("Executing Sortformer command", "args", RedactedCommand(args))
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.Canceled {

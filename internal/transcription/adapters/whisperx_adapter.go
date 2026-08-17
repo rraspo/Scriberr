@@ -495,7 +495,7 @@ func (w *WhisperXAdapter) Transcribe(ctx context.Context, input interfaces.Audio
 		cmd.Stderr = logFile
 	}
 
-	logger.Info("Executing WhisperX command", "args", strings.Join(args, " "))
+	logger.Info("Executing WhisperX command", "args", RedactedCommand(args))
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.Canceled {

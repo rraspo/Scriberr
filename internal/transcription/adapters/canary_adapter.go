@@ -355,7 +355,7 @@ func (c *CanaryAdapter) Transcribe(ctx context.Context, input interfaces.AudioIn
 		cmd.Stderr = logFile
 	}
 
-	logger.Info("Executing Canary command", "args", strings.Join(args, " "))
+	logger.Info("Executing Canary command", "args", RedactedCommand(args))
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.Canceled {

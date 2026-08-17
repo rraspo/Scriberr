@@ -397,7 +397,7 @@ func (p *ParakeetAdapter) transcribeStandard(ctx context.Context, input interfac
 		cmd.Stderr = logFile
 	}
 
-	logger.Info("Executing Parakeet command", "args", strings.Join(args, " "))
+	logger.Info("Executing Parakeet command", "args", RedactedCommand(args))
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.Canceled {
@@ -446,7 +446,7 @@ func (p *ParakeetAdapter) transcribeBuffered(ctx context.Context, input interfac
 		cmd.Stderr = logFile
 	}
 
-	logger.Info("Executing Parakeet buffered inference", "args", strings.Join(args, " "))
+	logger.Info("Executing Parakeet buffered inference", "args", RedactedCommand(args))
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.Canceled {
