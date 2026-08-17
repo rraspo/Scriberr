@@ -21,6 +21,7 @@ interface TranscriptionProfile {
 	name: string;
 	description?: string;
 	is_default: boolean;
+	is_fallback: boolean;
 	parameters: WhisperXParams;
 	execution_mode: "local" | "remote";
 	remote_host: string;

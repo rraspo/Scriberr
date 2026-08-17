@@ -77,6 +77,7 @@ export interface WhisperXParams {
 
 export interface ProfileExecutionSettings {
     execution_mode: "local" | "remote";
+    is_fallback: boolean;
     remote_host: string;
     remote_port: number;
     remote_user: string;
@@ -262,6 +263,7 @@ export const TranscriptionConfigDialog = memo(function TranscriptionConfigDialog
     const [profileDescription, setProfileDescription] = useState("");
     const [executionSettings, setExecutionSettings] = useState<ProfileExecutionSettings>({
         execution_mode: "local",
+        is_fallback: false,
         remote_host: "",
         remote_port: 22,
         remote_user: "",
@@ -291,6 +293,7 @@ export const TranscriptionConfigDialog = memo(function TranscriptionConfigDialog
             setProfileDescription(initialDescription);
             setExecutionSettings({
                 execution_mode: initialExecutionSettings?.execution_mode || "local",
+                is_fallback: initialExecutionSettings?.is_fallback ?? false,
                 remote_host: initialExecutionSettings?.remote_host || "",
                 remote_port: initialExecutionSettings?.remote_port || 22,
                 remote_user: initialExecutionSettings?.remote_user || "",
@@ -416,6 +419,17 @@ export const TranscriptionConfigDialog = memo(function TranscriptionConfigDialog
                                     { value: "remote", label: "Remote" },
                                 ]}
                             />
+
+                            <SwitchField
+                                id="is_fallback"
+                                label="Use as CPU fallback profile"
+                                checked={executionSettings.is_fallback}
+                                onCheckedChange={(value) => updateExecutionSetting('is_fallback', value)}
+                            />
+                            <p className="text-xs text-[var(--text-tertiary)] -mt-2">
+                                When a remote profile cannot reach its GPU host, the job re-runs on CPU with this
+                                profile's settings instead of its own. Only one profile can hold this role.
+                            </p>
 
                             {executionSettings.execution_mode === "remote" && (
                                 <div className="p-4 bg-[var(--bg-main)] rounded-xl border border-[var(--border-subtle)] space-y-4">

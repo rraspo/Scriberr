@@ -50,6 +50,7 @@ type UnifiedTranscriptionService struct {
 	defaultModelIDs       map[string]string      // Default model IDs for each task type
 	multiTrackTranscriber *MultiTrackTranscriber // For termination support
 	jobRepo               repository.JobRepository
+	profileRepo           repository.ProfileRepository
 	webhookService        *webhook.Service
 	broadcaster           *sse.Broadcaster
 }
@@ -75,6 +76,26 @@ func NewUnifiedTranscriptionService(jobRepo repository.JobRepository, tempDir, o
 // SetBroadcaster sets the SSE broadcaster for the service
 func (u *UnifiedTranscriptionService) SetBroadcaster(b *sse.Broadcaster) {
 	u.broadcaster = b
+}
+
+// SetProfileRepository supplies the profile store used to resolve the
+// is_fallback profile when a remote job drops to local CPU.
+func (u *UnifiedTranscriptionService) SetProfileRepository(repo repository.ProfileRepository) {
+	u.profileRepo = repo
+}
+
+// resolveFallbackParameters returns the parameters of the profile flagged
+// is_fallback, or nil when none is configured. A missing fallback profile is
+// normal, not an error: the job then falls back on its own parameters.
+func (u *UnifiedTranscriptionService) resolveFallbackParameters(ctx context.Context) map[string]interface{} {
+	if u.profileRepo == nil {
+		return nil
+	}
+	profile, err := u.profileRepo.FindFallback(ctx)
+	if err != nil || profile == nil {
+		return nil
+	}
+	return u.convertToWhisperXParams(profile.Parameters)
 }
 
 // Initialize prepares all registered models for use
@@ -225,6 +246,9 @@ func (u *UnifiedTranscriptionService) processSingleTrackJob(ctx context.Context,
 				logger.Error("Failed to persist job execution path", "job_id", job.ID, "error", err)
 			}
 		},
+	}
+	if job.Execution.Mode == "remote" {
+		procCtx.FallbackParameters = u.resolveFallbackParameters(ctx)
 	}
 
 	// Create output directory

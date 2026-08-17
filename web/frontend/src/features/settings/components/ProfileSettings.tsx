@@ -19,6 +19,7 @@ interface TranscriptionProfile {
 	name: string;
 	description?: string;
 	is_default: boolean;
+	is_fallback: boolean;
 	parameters: WhisperXParams;
 	execution_mode: "local" | "remote";
 	remote_host: string;
@@ -193,6 +194,7 @@ export function ProfileSettings() {
 				profileName: _pn,
 				profileDescription: _pd,
 				execution_mode,
+				is_fallback,
 				remote_host,
 				remote_port,
 				remote_user,
@@ -207,6 +209,7 @@ export function ProfileSettings() {
 				name,
 				description: description || undefined,
 				execution_mode,
+				is_fallback,
 				remote_host,
 				remote_port,
 				remote_user,

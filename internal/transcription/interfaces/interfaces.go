@@ -112,6 +112,11 @@ type ProcessingContext struct {
 	Metadata            map[string]string         `json:"metadata"`
 	Execution           models.ProfileExecution   `json:"execution"`
 	RecordExecutionPath func(path, reason string) `json:"-"`
+	// FallbackParameters are the resolved parameters of the profile flagged
+	// is_fallback. When a remote job falls back to local CPU these replace the
+	// job's own parameters, so a GPU-sized profile does not run large-v3 on the
+	// container's cores. Nil when no fallback profile is configured.
+	FallbackParameters map[string]interface{} `json:"-"`
 }
 
 // ModelAdapter is the base interface that all model adapters must implement

@@ -431,7 +431,7 @@ func (w *WhisperXAdapter) Transcribe(ctx context.Context, input interfaces.Audio
 				"host", procCtx.Execution.RemoteHost, "port", procCtx.Execution.RemotePort)
 			recordExecutionPath(procCtx, "local-fallback", decision.Reason)
 			procCtx.Execution.Mode = "local"
-			params = localCPUParameters(params)
+			params = fallbackParameters(procCtx, params)
 			if w.localFallback != nil {
 				return w.localFallback(ctx, input, params, procCtx)
 			}
@@ -529,6 +529,25 @@ func (w *WhisperXAdapter) Transcribe(ctx context.Context, input interfaces.Audio
 		"processing_time", result.ProcessingTime)
 
 	return result, nil
+}
+
+// fallbackParameters picks the parameters a remote job re-runs with once it has
+// dropped to local CPU. A profile flagged is_fallback wins outright: a GPU
+// profile's model and batch size are sized for a 4090, not for the container's
+// cores. Without one, the job keeps its own parameters forced onto CPU.
+func fallbackParameters(procCtx interfaces.ProcessingContext, params map[string]interface{}) map[string]interface{} {
+	if len(procCtx.FallbackParameters) == 0 {
+		return localCPUParameters(params)
+	}
+	fallback := localCPUParameters(procCtx.FallbackParameters)
+	// The credential belongs to the deployment, not the profile, and the
+	// fallback profile may not carry one.
+	if _, ok := fallback["hf_token"]; !ok {
+		if token, ok := params["hf_token"]; ok {
+			fallback["hf_token"] = token
+		}
+	}
+	return fallback
 }
 
 func localCPUParameters(params map[string]interface{}) map[string]interface{} {

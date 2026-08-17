@@ -196,6 +196,7 @@ type TranscriptionProfile struct {
 	Name                        string         `json:"name" gorm:"type:varchar(255);not null"`
 	Description                 *string        `json:"description,omitempty" gorm:"type:text"`
 	IsDefault                   bool           `json:"is_default" gorm:"type:boolean;default:false"`
+	IsFallback                  bool           `json:"is_fallback" gorm:"type:boolean;default:false"`
 	ExecutionMode               string         `json:"execution_mode" gorm:"type:text;not null;default:'local';check:execution_mode IN ('local','remote')"`
 	RemoteHost                  string         `json:"remote_host" gorm:"type:text"`
 	RemotePort                  int            `json:"remote_port" gorm:"type:int;not null;default:22"`
@@ -217,11 +218,17 @@ func (tp *TranscriptionProfile) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// BeforeSave ensures only one profile can be default
+// BeforeSave ensures only one profile can be default, and only one can be the
+// CPU fallback used when a remote profile cannot reach its GPU host.
 func (tp *TranscriptionProfile) BeforeSave(tx *gorm.DB) error {
 	if tp.IsDefault {
 		// Set all other profiles to not default
 		if err := tx.Model(&TranscriptionProfile{}).Where("id != ?", tp.ID).Update("is_default", false).Error; err != nil {
+			return err
+		}
+	}
+	if tp.IsFallback {
+		if err := tx.Model(&TranscriptionProfile{}).Where("id != ?", tp.ID).Update("is_fallback", false).Error; err != nil {
 			return err
 		}
 	}

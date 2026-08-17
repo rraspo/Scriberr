@@ -259,6 +259,7 @@ func (r *apiKeyRepository) Revoke(ctx context.Context, id uint) error {
 type ProfileRepository interface {
 	Repository[models.TranscriptionProfile]
 	FindDefault(ctx context.Context) (*models.TranscriptionProfile, error)
+	FindFallback(ctx context.Context) (*models.TranscriptionProfile, error)
 	FindByName(ctx context.Context, name string) (*models.TranscriptionProfile, error)
 }
 
@@ -275,6 +276,17 @@ func NewProfileRepository(db *gorm.DB) ProfileRepository {
 func (r *profileRepository) FindDefault(ctx context.Context) (*models.TranscriptionProfile, error) {
 	var profile models.TranscriptionProfile
 	err := r.db.WithContext(ctx).Where("is_default = ?", true).First(&profile).Error
+	if err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+// FindFallback returns the profile flagged as the CPU fallback, used when a
+// remote profile's GPU host is unreachable.
+func (r *profileRepository) FindFallback(ctx context.Context) (*models.TranscriptionProfile, error) {
+	var profile models.TranscriptionProfile
+	err := r.db.WithContext(ctx).Where("is_fallback = ?", true).First(&profile).Error
 	if err != nil {
 		return nil, err
 	}
