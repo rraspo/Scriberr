@@ -213,6 +213,32 @@ func TestRemoteWhisperXSubmitCommandForwardsAllProfileParameters(t *testing.T) {
 	}
 }
 
+func TestRemoteWhisperXSubmitCommandOmitsUnsetLanguage(t *testing.T) {
+	tests := []struct {
+		name     string
+		language interface{}
+	}{
+		{"absent", nil},
+		{"empty", ""},
+		{"blank", "   "},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			executor := NewRemoteWhisperXExecutor(nil, models.ProfileExecution{RemoteWorkDir: "/srv/scriberr-work"})
+			params := map[string]interface{}{"model": "small"}
+			if test.language != nil {
+				params["language"] = test.language
+			}
+
+			command := executor.submitCommand("job-1", params)
+
+			// A flag with no value makes the remote wrapper exit 1 with no stderr.
+			require.NotContains(t, command, "--language")
+			require.Equal(t, "/srv/scriberr-work/scriberr-remote-job.sh --job-id job-1 --model small", command)
+		})
+	}
+}
+
 func TestWhisperXAdapterRemotePathUsesExistingResultParser(t *testing.T) {
 	root := t.TempDir()
 	audioPath := filepath.Join(root, "audio.wav")

@@ -129,7 +129,13 @@ func (e *RemoteWhisperXExecutor) Execute(ctx context.Context, jobID, audioPath s
 
 func (e *RemoteWhisperXExecutor) submitCommand(jobID string, params map[string]interface{}) string {
 	parts := []string{filepath.ToSlash(filepath.Join(e.profile.RemoteWorkDir, "scriberr-remote-job.sh")), "--job-id", jobID,
-		"--model", parameterString(params, "model"), "--language", parameterString(params, "language")}
+		"--model", parameterString(params, "model")}
+	// The wrapper takes --language as a flag+value pair; passing it with an empty
+	// value makes the remote script exit 1 with no stderr. Omit it entirely and
+	// let whisperx auto-detect, matching the local adapter's behaviour.
+	if language := strings.TrimSpace(parameterString(params, "language")); language != "" {
+		parts = append(parts, "--language", language)
+	}
 	if parameterBool(params, "diarize") {
 		parts = append(parts, "--diarize")
 	}
