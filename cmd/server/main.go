@@ -168,6 +168,7 @@ func main() {
 		broadcaster,
 	)
 	handler.SetSpeakerProfileRepo(speakerProfileRepo)
+	handler.SetSpeakerEmbeddingExtractor(adapters.NewSpeakerEmbeddingAdapter(filepath.Join(cfg.WhisperXEnv, "speaker")))
 
 	// Set up router
 	router := api.SetupRoutes(handler, authService)

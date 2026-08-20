@@ -196,6 +196,7 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 			speakers.PATCH("/profiles/:id", handler.UpdateSpeakerProfile)
 			speakers.DELETE("/profiles/:id", handler.DeleteSpeakerProfile)
 			speakers.GET("/profiles/:id/samples", handler.ListSpeakerProfileSamples)
+			speakers.POST("/profiles/:id/samples", handler.EnrollSpeakerProfileSample)
 			speakers.DELETE("/profiles/:id/samples/:sample_id", handler.DeleteSpeakerProfileSample)
 		}
 

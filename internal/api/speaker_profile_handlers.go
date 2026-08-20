@@ -63,6 +63,16 @@ func speakerProfileToResponse(profile models.SpeakerProfile, sampleCount int64) 
 	}
 }
 
+func speakerProfileSampleToResponse(sample models.SpeakerProfileSample) SpeakerProfileSampleResponse {
+	return SpeakerProfileSampleResponse{
+		ID:                 sample.ID,
+		Source:             sample.Source,
+		SourceSpeakerLabel: sample.SourceSpeakerLabel,
+		SecondsUsed:        sample.SecondsUsed,
+		CreatedAt:          sample.CreatedAt,
+	}
+}
+
 func parseSpeakerProfilePathID(c *gin.Context, param string) (uint, bool) {
 	raw := c.Param(param)
 	value, err := strconv.ParseUint(raw, 10, 64)
@@ -273,13 +283,7 @@ func (h *Handler) ListSpeakerProfileSamples(c *gin.Context) {
 
 	response := make([]SpeakerProfileSampleResponse, len(samples))
 	for i, sample := range samples {
-		response[i] = SpeakerProfileSampleResponse{
-			ID:                 sample.ID,
-			Source:             sample.Source,
-			SourceSpeakerLabel: sample.SourceSpeakerLabel,
-			SecondsUsed:        sample.SecondsUsed,
-			CreatedAt:          sample.CreatedAt,
-		}
+		response[i] = speakerProfileSampleToResponse(sample)
 	}
 
 	c.JSON(http.StatusOK, response)

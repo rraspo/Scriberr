@@ -26,6 +26,7 @@ type SpeakerProfileRepository interface {
 	DeleteWithSamples(ctx context.Context, id uint) error
 	CountSamples(ctx context.Context, profileID uint) (int64, error)
 	ListSamples(ctx context.Context, profileID uint) ([]models.SpeakerProfileSample, error)
+	CreateSample(ctx context.Context, sample *models.SpeakerProfileSample) error
 	DeleteSample(ctx context.Context, profileID, sampleID uint) error
 }
 
@@ -122,6 +123,13 @@ func (r *speakerProfileRepository) ListSamples(ctx context.Context, profileID ui
 		return nil, err
 	}
 	return samples, nil
+}
+
+// CreateSample enrolls a new sample against a speaker profile. Multiple
+// samples per profile is the intended shape, so this never checks for or
+// replaces an existing sample from the same job and speaker label.
+func (r *speakerProfileRepository) CreateSample(ctx context.Context, sample *models.SpeakerProfileSample) error {
+	return r.db.WithContext(ctx).Create(sample).Error
 }
 
 // DeleteSample removes a single sample, scoped to the profile it must

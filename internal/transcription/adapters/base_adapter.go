@@ -529,13 +529,16 @@ func (b *BaseAdapter) LogProcessingStart(input interfaces.AudioInput, procCtx in
 		"audio_size", input.Size)
 }
 
-// secretArgFlags are command-line flags whose value must never reach the logs.
+// secretArgFlags are command-line flags whose value must never reach the
+// logs: credentials, and flags carrying a filesystem path that would expose
+// where audio (biometric-shaped, in the speaker embedding case) lives on disk.
 var secretArgFlags = map[string]bool{
 	"--hf_token": true,
 	"--hf-token": true,
 	"--api_key":  true,
 	"--api-key":  true,
 	"--token":    true,
+	"--audio":    true,
 }
 
 // RedactedCommand joins args into a loggable command line, masking the value of

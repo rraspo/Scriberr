@@ -244,3 +244,29 @@ type Postprocessor interface {
 // Legacy type aliases for backward compatibility
 type Segment = TranscriptSegment
 type Word = TranscriptWord
+
+// SpeakerSegment is one diarized speech span for a single speaker, already
+// scoped to the label being enrolled before it reaches the embedding
+// extractor. Defined here rather than in the api or adapters package so
+// both can depend on it without adapters importing api.
+type SpeakerSegment struct {
+	Speaker string
+	Start   float64
+	End     float64
+}
+
+// SpeakerEmbeddingResult is what a SpeakerEmbeddingExtractor returns for one
+// speaker's selected segments. A nil Embedding means the speaker's usable
+// audio fell under the extractor's audio floor, not that extraction failed.
+type SpeakerEmbeddingResult struct {
+	Dimensions   int
+	Embedding    []byte
+	SecondsUsed  float64
+	SegmentsUsed int
+}
+
+// SpeakerEmbeddingExtractor computes a voice embedding from a single
+// speaker's diarized segments in an audio file.
+type SpeakerEmbeddingExtractor interface {
+	ExtractSpeakerEmbedding(ctx context.Context, audioPath string, segments []SpeakerSegment) (*SpeakerEmbeddingResult, error)
+}

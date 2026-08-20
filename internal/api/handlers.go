@@ -34,26 +34,27 @@ import (
 
 // Handler contains all the API handlers
 type Handler struct {
-	config              *config.Config
-	authService         *auth.AuthService
-	userService         service.UserService
-	fileService         service.FileService
-	jobRepo             repository.JobRepository
-	apiKeyRepo          repository.APIKeyRepository
-	profileRepo         repository.ProfileRepository
-	userRepo            repository.UserRepository
-	llmConfigRepo       repository.LLMConfigRepository
-	summaryRepo         repository.SummaryRepository
-	chatRepo            repository.ChatRepository
-	noteRepo            repository.NoteRepository
-	speakerMappingRepo  repository.SpeakerMappingRepository
-	speakerProfileRepo  repository.SpeakerProfileRepository
-	refreshTokenRepo    repository.RefreshTokenRepository
-	taskQueue           *queue.TaskQueue
-	unifiedProcessor    *transcription.UnifiedJobProcessor
-	quickTranscription  *transcription.QuickTranscriptionService
-	multiTrackProcessor *processing.MultiTrackProcessor
-	broadcaster         *sse.Broadcaster
+	config                    *config.Config
+	authService               *auth.AuthService
+	userService               service.UserService
+	fileService               service.FileService
+	jobRepo                   repository.JobRepository
+	apiKeyRepo                repository.APIKeyRepository
+	profileRepo               repository.ProfileRepository
+	userRepo                  repository.UserRepository
+	llmConfigRepo             repository.LLMConfigRepository
+	summaryRepo               repository.SummaryRepository
+	chatRepo                  repository.ChatRepository
+	noteRepo                  repository.NoteRepository
+	speakerMappingRepo        repository.SpeakerMappingRepository
+	speakerProfileRepo        repository.SpeakerProfileRepository
+	speakerEmbeddingExtractor SpeakerEmbeddingExtractor
+	refreshTokenRepo          repository.RefreshTokenRepository
+	taskQueue                 *queue.TaskQueue
+	unifiedProcessor          *transcription.UnifiedJobProcessor
+	quickTranscription        *transcription.QuickTranscriptionService
+	multiTrackProcessor       *processing.MultiTrackProcessor
+	broadcaster               *sse.Broadcaster
 }
 
 // NewHandler creates a new handler
