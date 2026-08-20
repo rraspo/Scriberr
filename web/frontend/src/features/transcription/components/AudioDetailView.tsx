@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { useAudioDetail, useUpdateTitle, useTranscript, type TranscriptSegment } from "@/features/transcription/hooks/useAudioDetail";
 import { useSpeakerMappings } from "@/features/transcription/hooks/useTranscriptionSpeakers";
 import { useTranscriptDownload } from "@/features/transcription/hooks/useTranscriptDownload";
+import { useTranscriptMode } from "@/hooks/use-transcript-mode";
 
 // Sub-components
 import { TranscriptSection } from "./audio-detail/TranscriptSection";
@@ -44,7 +45,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
     const [newTitle, setNewTitle] = useState("");
 
     // Lifted Transcript State
-    const [transcriptMode, setTranscriptMode] = useState<"compact" | "expanded">("compact");
+    const [transcriptMode, setTranscriptMode] = useTranscriptMode();
     const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
     const [notesOpen, setNotesOpen] = useState(false);
     const [speakerRenameOpen, setSpeakerRenameOpen] = useState(false);
