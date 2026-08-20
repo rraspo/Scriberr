@@ -27,7 +27,10 @@ import (
 // Both values are package-level defaults wired in at construction time so a
 // deployment can tune them without touching the matching logic.
 const (
-	speakerMatchThreshold = 0.50
+	// 0.50 produced a live false positive: an unenrolled speaker scored 0.57
+	// against a single-sample profile and claimed a meeting's dominant voice.
+	// Genuine same-speaker matches observed so far score 0.62 and above.
+	speakerMatchThreshold = 0.60
 	speakerMatchMargin    = 0.08
 )
 
