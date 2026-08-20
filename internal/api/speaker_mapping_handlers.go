@@ -22,9 +22,30 @@ type SpeakerMappingsUpdateRequest struct {
 
 // SpeakerMappingResponse represents a speaker mapping response
 type SpeakerMappingResponse struct {
-	ID              uint   `json:"id"`
-	OriginalSpeaker string `json:"original_speaker"`
-	CustomName      string `json:"custom_name"`
+	ID               uint     `json:"id"`
+	OriginalSpeaker  string   `json:"original_speaker"`
+	CustomName       string   `json:"custom_name"`
+	Source           string   `json:"source"`
+	Confidence       *float64 `json:"confidence,omitempty"`
+	SpeakerProfileID *uint    `json:"speaker_profile_id,omitempty"`
+}
+
+// speakerMappingToResponse converts a stored mapping to its response shape.
+// Rows predating the provenance columns carry an empty source and mean a
+// human wrote them, so they read as manual.
+func speakerMappingToResponse(mapping models.SpeakerMapping) SpeakerMappingResponse {
+	source := mapping.Source
+	if source == "" {
+		source = "manual"
+	}
+	return SpeakerMappingResponse{
+		ID:               mapping.ID,
+		OriginalSpeaker:  mapping.OriginalSpeaker,
+		CustomName:       mapping.CustomName,
+		Source:           source,
+		Confidence:       mapping.Confidence,
+		SpeakerProfileID: mapping.SpeakerProfileID,
+	}
 }
 
 // GetSpeakerMappings retrieves all speaker mappings for a transcription
@@ -71,11 +92,7 @@ func (h *Handler) GetSpeakerMappings(c *gin.Context) {
 	// Convert to response format
 	response := make([]SpeakerMappingResponse, len(mappings))
 	for i, mapping := range mappings {
-		response[i] = SpeakerMappingResponse{
-			ID:              mapping.ID,
-			OriginalSpeaker: mapping.OriginalSpeaker,
-			CustomName:      mapping.CustomName,
-		}
+		response[i] = speakerMappingToResponse(mapping)
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -148,11 +165,7 @@ func (h *Handler) UpdateSpeakerMappings(c *gin.Context) {
 	// Convert to response format
 	response := make([]SpeakerMappingResponse, len(updatedMappings))
 	for i, mapping := range updatedMappings {
-		response[i] = SpeakerMappingResponse{
-			ID:              mapping.ID,
-			OriginalSpeaker: mapping.OriginalSpeaker,
-			CustomName:      mapping.CustomName,
-		}
+		response[i] = speakerMappingToResponse(mapping)
 	}
 
 	c.JSON(http.StatusOK, response)

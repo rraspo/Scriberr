@@ -4824,6 +4824,9 @@
         "api.SpeakerMappingResponse": {
             "type": "object",
             "properties": {
+                "confidence": {
+                    "type": "number"
+                },
                 "custom_name": {
                     "type": "string"
                 },
@@ -4832,6 +4835,12 @@
                 },
                 "original_speaker": {
                     "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "speaker_profile_id": {
+                    "type": "integer"
                 }
             }
         },

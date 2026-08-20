@@ -4830,6 +4830,9 @@ const docTemplate = `{
         "api.SpeakerMappingResponse": {
             "type": "object",
             "properties": {
+                "confidence": {
+                    "type": "number"
+                },
                 "custom_name": {
                     "type": "string"
                 },
@@ -4838,6 +4841,12 @@ const docTemplate = `{
                 },
                 "original_speaker": {
                     "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "speaker_profile_id": {
+                    "type": "integer"
                 }
             }
         },

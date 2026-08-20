@@ -351,12 +351,18 @@ definitions:
     type: object
   api.SpeakerMappingResponse:
     properties:
+      confidence:
+        type: number
       custom_name:
         type: string
       id:
         type: integer
       original_speaker:
         type: string
+      source:
+        type: string
+      speaker_profile_id:
+        type: integer
     type: object
   api.SpeakerMappingsUpdateRequest:
     properties:
