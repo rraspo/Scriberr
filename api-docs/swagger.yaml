@@ -165,6 +165,15 @@ definitions:
       name:
         type: string
     type: object
+  api.CreateSpeakerProfileRequest:
+    properties:
+      name:
+        type: string
+      notes:
+        type: string
+    required:
+    - name
+    type: object
   api.ErrorResponse:
     properties:
       error:
@@ -287,8 +296,30 @@ definitions:
     type: object
   api.RegistrationStatusResponse:
     properties:
+      auth_disabled:
+        type: boolean
       registration_enabled:
         description: Match tests expecting snake_case key
+        type: boolean
+    type: object
+  api.RemoteExecutionHealthResponse:
+    properties:
+      has_remote:
+        type: boolean
+      hosts:
+        items:
+          $ref: '#/definitions/api.RemoteHostHealth'
+        type: array
+      reachable:
+        type: boolean
+    type: object
+  api.RemoteHostHealth:
+    properties:
+      host:
+        type: string
+      port:
+        type: integer
+      reachable:
         type: boolean
     type: object
   api.SetUserDefaultProfileRequest:
@@ -325,6 +356,32 @@ definitions:
         type: array
     required:
     - mappings
+    type: object
+  api.SpeakerProfileResponse:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      notes:
+        type: string
+      sample_count:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  api.SpeakerProfileSampleResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      seconds_used:
+        type: number
+      source:
+        type: string
+      source_speaker_label:
+        type: string
     type: object
   api.SummarizeRequest:
     properties:
@@ -373,6 +430,13 @@ definitions:
     - model
     - name
     - prompt
+    type: object
+  api.UpdateSpeakerProfileRequest:
+    properties:
+      name:
+        type: string
+      notes:
+        type: string
     type: object
   api.UpdateUserSettingsRequest:
     properties:
@@ -481,6 +545,25 @@ definitions:
       updated_at:
         type: string
     type: object
+  models.ProfileExecution:
+    properties:
+      mode:
+        type: string
+      remote_command_prefix:
+        type: string
+      remote_connect_timeout_seconds:
+        type: integer
+      remote_host:
+        type: string
+      remote_key_path:
+        type: string
+      remote_port:
+        type: integer
+      remote_user:
+        type: string
+      remote_work_dir:
+        type: string
+    type: object
   models.Summary:
     properties:
       content:
@@ -534,6 +617,12 @@ definitions:
       diarization:
         type: boolean
       error_message:
+        type: string
+      execution:
+        $ref: '#/definitions/models.ProfileExecution'
+      execution_path:
+        type: string
+      execution_reason:
         type: string
       id:
         type: string
@@ -622,14 +711,32 @@ definitions:
         type: string
       description:
         type: string
+      execution_mode:
+        type: string
       id:
         type: string
       is_default:
+        type: boolean
+      is_fallback:
         type: boolean
       name:
         type: string
       parameters:
         $ref: '#/definitions/models.WhisperXParams'
+      remote_command_prefix:
+        type: string
+      remote_connect_timeout_seconds:
+        type: integer
+      remote_host:
+        type: string
+      remote_key_path:
+        type: string
+      remote_port:
+        type: integer
+      remote_user:
+        type: string
+      remote_work_dir:
+        type: string
       updated_at:
         type: string
     type: object
@@ -732,6 +839,9 @@ definitions:
       segment_resolution:
         type: string
       speaker_embeddings:
+        description: |-
+          SpeakerEmbeddings is unused by speaker profile matching and is
+          deliberately left in place rather than removed or repurposed.
         type: boolean
       suppress_numerals:
         type: boolean
@@ -1781,6 +1891,243 @@ paths:
       summary: Set default transcription profile
       tags:
       - profiles
+  /api/v1/speakers/profiles:
+    get:
+      description: Lists every speaker profile along with how many samples are enrolled
+        against it
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.SpeakerProfileResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: List speaker profiles
+      tags:
+      - speakers
+    post:
+      consumes:
+      - application/json
+      description: Creates a new named speaker profile that samples can later be enrolled
+        against
+      parameters:
+      - description: Speaker profile to create
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.CreateSpeakerProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.SpeakerProfileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Create a speaker profile
+      tags:
+      - speakers
+  /api/v1/speakers/profiles/{id}:
+    delete:
+      description: Deletes a speaker profile along with every sample enrolled against
+        it
+      parameters:
+      - description: Speaker Profile ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Delete a speaker profile
+      tags:
+      - speakers
+    patch:
+      consumes:
+      - application/json
+      description: Renames a speaker profile and/or updates its notes
+      parameters:
+      - description: Speaker Profile ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.UpdateSpeakerProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SpeakerProfileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Update a speaker profile
+      tags:
+      - speakers
+  /api/v1/speakers/profiles/{id}/samples:
+    get:
+      description: Lists the samples enrolled against a speaker profile, never including
+        embedding data
+      parameters:
+      - description: Speaker Profile ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.SpeakerProfileSampleResponse'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: List speaker profile samples
+      tags:
+      - speakers
+  /api/v1/speakers/profiles/{id}/samples/{sample_id}:
+    delete:
+      description: Deletes a single sample from a speaker profile, leaving the profile
+        and its other samples intact
+      parameters:
+      - description: Speaker Profile ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Speaker Profile Sample ID
+        in: path
+        name: sample_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Delete a speaker profile sample
+      tags:
+      - speakers
   /api/v1/summaries:
     get:
       description: Get all summarization templates
@@ -2757,6 +3104,23 @@ paths:
       - ApiKeyAuth: []
       - BearerAuth: []
       summary: Get quick transcription status
+      tags:
+      - transcription
+  /api/v1/transcription/remote-execution/health:
+    get:
+      description: Check whether the remote SSH hosts referenced by remote-mode profiles
+        are reachable
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RemoteExecutionHealthResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Remote execution health
       tags:
       - transcription
   /api/v1/transcription/submit:

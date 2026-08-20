@@ -1602,6 +1602,377 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/speakers/profiles": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Lists every speaker profile along with how many samples are enrolled against it",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "speakers"
+                ],
+                "summary": "List speaker profiles",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.SpeakerProfileResponse"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Creates a new named speaker profile that samples can later be enrolled against",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "speakers"
+                ],
+                "summary": "Create a speaker profile",
+                "parameters": [
+                    {
+                        "description": "Speaker profile to create",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.CreateSpeakerProfileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/api.SpeakerProfileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/speakers/profiles/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Deletes a speaker profile along with every sample enrolled against it",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "speakers"
+                ],
+                "summary": "Delete a speaker profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Speaker Profile ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Renames a speaker profile and/or updates its notes",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "speakers"
+                ],
+                "summary": "Update a speaker profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Speaker Profile ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.UpdateSpeakerProfileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.SpeakerProfileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/speakers/profiles/{id}/samples": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Lists the samples enrolled against a speaker profile, never including embedding data",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "speakers"
+                ],
+                "summary": "List speaker profile samples",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Speaker Profile ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.SpeakerProfileSampleResponse"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/speakers/profiles/{id}/samples/{sample_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Deletes a single sample from a speaker profile, leaving the profile and its other samples intact",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "speakers"
+                ],
+                "summary": "Delete a speaker profile sample",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Speaker Profile ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Speaker Profile Sample ID",
+                        "name": "sample_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/summaries": {
             "get": {
                 "security": [
@@ -2246,6 +2617,34 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/transcription/remote-execution/health": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Check whether the remote SSH hosts referenced by remote-mode profiles are reachable",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transcription"
+                ],
+                "summary": "Remote execution health",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.RemoteExecutionHealthResponse"
                         }
                     }
                 }
@@ -4072,6 +4471,20 @@ const docTemplate = `{
                 }
             }
         },
+        "api.CreateSpeakerProfileRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "notes": {
+                    "type": "string"
+                }
+            }
+        },
         "api.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -4250,8 +4663,42 @@ const docTemplate = `{
         "api.RegistrationStatusResponse": {
             "type": "object",
             "properties": {
+                "auth_disabled": {
+                    "type": "boolean"
+                },
                 "registration_enabled": {
                     "description": "Match tests expecting snake_case key",
+                    "type": "boolean"
+                }
+            }
+        },
+        "api.RemoteExecutionHealthResponse": {
+            "type": "object",
+            "properties": {
+                "has_remote": {
+                    "type": "boolean"
+                },
+                "hosts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.RemoteHostHealth"
+                    }
+                },
+                "reachable": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "api.RemoteHostHealth": {
+            "type": "object",
+            "properties": {
+                "host": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "reachable": {
                     "type": "boolean"
                 }
             }
@@ -4307,6 +4754,46 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/api.SpeakerMappingRequest"
                     }
+                }
+            }
+        },
+        "api.SpeakerProfileResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "sample_count": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.SpeakerProfileSampleResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "seconds_used": {
+                    "type": "number"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "source_speaker_label": {
+                    "type": "string"
                 }
             }
         },
@@ -4377,6 +4864,17 @@ const docTemplate = `{
                 "prompt": {
                     "type": "string",
                     "minLength": 1
+                }
+            }
+        },
+        "api.UpdateSpeakerProfileRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "notes": {
+                    "type": "string"
                 }
             }
         },
@@ -4538,6 +5036,35 @@ const docTemplate = `{
                 }
             }
         },
+        "models.ProfileExecution": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string"
+                },
+                "remote_command_prefix": {
+                    "type": "string"
+                },
+                "remote_connect_timeout_seconds": {
+                    "type": "integer"
+                },
+                "remote_host": {
+                    "type": "string"
+                },
+                "remote_key_path": {
+                    "type": "string"
+                },
+                "remote_port": {
+                    "type": "integer"
+                },
+                "remote_user": {
+                    "type": "string"
+                },
+                "remote_work_dir": {
+                    "type": "string"
+                }
+            }
+        },
         "models.Summary": {
             "type": "object",
             "properties": {
@@ -4620,6 +5147,15 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "error_message": {
+                    "type": "string"
+                },
+                "execution": {
+                    "$ref": "#/definitions/models.ProfileExecution"
+                },
+                "execution_path": {
+                    "type": "string"
+                },
+                "execution_reason": {
                     "type": "string"
                 },
                 "id": {
@@ -4756,10 +5292,16 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
+                "execution_mode": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
                 "is_default": {
+                    "type": "boolean"
+                },
+                "is_fallback": {
                     "type": "boolean"
                 },
                 "name": {
@@ -4767,6 +5309,27 @@ const docTemplate = `{
                 },
                 "parameters": {
                     "$ref": "#/definitions/models.WhisperXParams"
+                },
+                "remote_command_prefix": {
+                    "type": "string"
+                },
+                "remote_connect_timeout_seconds": {
+                    "type": "integer"
+                },
+                "remote_host": {
+                    "type": "string"
+                },
+                "remote_key_path": {
+                    "type": "string"
+                },
+                "remote_port": {
+                    "type": "integer"
+                },
+                "remote_user": {
+                    "type": "string"
+                },
+                "remote_work_dir": {
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -4914,6 +5477,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "speaker_embeddings": {
+                    "description": "SpeakerEmbeddings is unused by speaker profile matching and is\ndeliberately left in place rather than removed or repurposed.",
                     "type": "boolean"
                 },
                 "suppress_numerals": {

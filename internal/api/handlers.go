@@ -47,6 +47,7 @@ type Handler struct {
 	chatRepo            repository.ChatRepository
 	noteRepo            repository.NoteRepository
 	speakerMappingRepo  repository.SpeakerMappingRepository
+	speakerProfileRepo  repository.SpeakerProfileRepository
 	refreshTokenRepo    repository.RefreshTokenRepository
 	taskQueue           *queue.TaskQueue
 	unifiedProcessor    *transcription.UnifiedJobProcessor

@@ -107,6 +107,7 @@ func main() {
 	chatRepo := repository.NewChatRepository(database.DB)
 	noteRepo := repository.NewNoteRepository(database.DB)
 	speakerMappingRepo := repository.NewSpeakerMappingRepository(database.DB)
+	speakerProfileRepo := repository.NewSpeakerProfileRepository(database.DB)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(database.DB)
 
 	// Initialize services
@@ -166,6 +167,7 @@ func main() {
 		multiTrackProcessor,
 		broadcaster,
 	)
+	handler.SetSpeakerProfileRepo(speakerProfileRepo)
 
 	// Set up router
 	router := api.SetupRoutes(handler, authService)

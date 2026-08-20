@@ -100,11 +100,13 @@ type WhisperXParams struct {
 	ChunkSize int     `json:"chunk_size" gorm:"type:int;default:30"`
 
 	// Diarization settings
-	Diarize           bool   `json:"diarize" gorm:"type:boolean;default:false"`
-	MinSpeakers       *int   `json:"min_speakers,omitempty" gorm:"type:int"`
-	MaxSpeakers       *int   `json:"max_speakers,omitempty" gorm:"type:int"`
-	DiarizeModel      string `json:"diarize_model" gorm:"type:varchar(50);default:'pyannote'"` // Options: 'pyannote', 'nvidia_sortformer'
-	SpeakerEmbeddings bool   `json:"speaker_embeddings" gorm:"type:boolean;default:false"`
+	Diarize      bool   `json:"diarize" gorm:"type:boolean;default:false"`
+	MinSpeakers  *int   `json:"min_speakers,omitempty" gorm:"type:int"`
+	MaxSpeakers  *int   `json:"max_speakers,omitempty" gorm:"type:int"`
+	DiarizeModel string `json:"diarize_model" gorm:"type:varchar(50);default:'pyannote'"` // Options: 'pyannote', 'nvidia_sortformer'
+	// SpeakerEmbeddings is unused by speaker profile matching and is
+	// deliberately left in place rather than removed or repurposed.
+	SpeakerEmbeddings bool `json:"speaker_embeddings" gorm:"type:boolean;default:false"`
 
 	// Transcription quality settings
 	Temperature                    float64 `json:"temperature" gorm:"type:real;default:0"`
@@ -373,6 +375,9 @@ type SpeakerMapping struct {
 	TranscriptionJobID string    `json:"transcription_job_id" gorm:"type:varchar(36);not null;index"`
 	OriginalSpeaker    string    `json:"original_speaker" gorm:"type:varchar(50);not null"` // e.g., "speaker_00"
 	CustomName         string    `json:"custom_name" gorm:"type:varchar(100);not null"`     // e.g., "John Doe"
+	SpeakerProfileID   *uint     `json:"speaker_profile_id,omitempty" gorm:"index"`
+	Source             string    `json:"source" gorm:"type:varchar(20);not null;default:'manual'"` // e.g., "manual", "profile_match"
+	Confidence         *float64  `json:"confidence,omitempty" gorm:"type:real"`
 	CreatedAt          time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt          time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 

@@ -187,6 +187,18 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 			profiles.POST("/:id/set-default", handler.SetDefaultProfile)
 		}
 
+		// Speaker profile routes (require authentication)
+		speakers := v1.Group("/speakers")
+		speakers.Use(authMiddleware)
+		{
+			speakers.GET("/profiles", handler.ListSpeakerProfiles)
+			speakers.POST("/profiles", handler.CreateSpeakerProfile)
+			speakers.PATCH("/profiles/:id", handler.UpdateSpeakerProfile)
+			speakers.DELETE("/profiles/:id", handler.DeleteSpeakerProfile)
+			speakers.GET("/profiles/:id/samples", handler.ListSpeakerProfileSamples)
+			speakers.DELETE("/profiles/:id/samples/:sample_id", handler.DeleteSpeakerProfileSample)
+		}
+
 		// User routes (require authentication)
 		user := v1.Group("/user")
 		user.Use(jwtOnlyMiddleware)
