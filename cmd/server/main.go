@@ -121,6 +121,13 @@ func main() {
 	unifiedProcessor.GetUnifiedService().SetBroadcaster(broadcaster)
 	unifiedProcessor.GetUnifiedService().SetProfileRepository(profileRepo)
 
+	// One extractor instance serves both enrollment and identification: it
+	// holds no per-request state, only the path of its Python environment.
+	speakerEmbeddingExtractor := adapters.NewSpeakerEmbeddingAdapter(filepath.Join(cfg.WhisperXEnv, "speaker"))
+	unifiedProcessor.GetUnifiedService().SetSpeakerIdentifier(
+		transcription.NewDefaultSpeakerIdentifier(database.DB, speakerEmbeddingExtractor),
+	)
+
 	// Bootstrap embedded Python environment (for all adapters)
 	logger.Startup("python", "Preparing Python environment")
 	if err := unifiedProcessor.InitEmbeddedPythonEnv(); err != nil {
@@ -168,7 +175,7 @@ func main() {
 		broadcaster,
 	)
 	handler.SetSpeakerProfileRepo(speakerProfileRepo)
-	handler.SetSpeakerEmbeddingExtractor(adapters.NewSpeakerEmbeddingAdapter(filepath.Join(cfg.WhisperXEnv, "speaker")))
+	handler.SetSpeakerEmbeddingExtractor(speakerEmbeddingExtractor)
 
 	// Set up router
 	router := api.SetupRoutes(handler, authService)

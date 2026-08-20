@@ -53,6 +53,7 @@ type UnifiedTranscriptionService struct {
 	profileRepo           repository.ProfileRepository
 	webhookService        *webhook.Service
 	broadcaster           *sse.Broadcaster
+	speakerIdentifier     *SpeakerIdentifier
 }
 
 // NewUnifiedTranscriptionService creates a new unified transcription service
@@ -82,6 +83,13 @@ func (u *UnifiedTranscriptionService) SetBroadcaster(b *sse.Broadcaster) {
 // is_fallback profile when a remote job drops to local CPU.
 func (u *UnifiedTranscriptionService) SetProfileRepository(repo repository.ProfileRepository) {
 	u.profileRepo = repo
+}
+
+// SetSpeakerIdentifier supplies the identifier that names diarized speakers
+// from enrolled voice profiles once a job's results are saved. Left unset,
+// jobs simply keep their diarized SPEAKER_NN labels.
+func (u *UnifiedTranscriptionService) SetSpeakerIdentifier(identifier *SpeakerIdentifier) {
+	u.speakerIdentifier = identifier
 }
 
 // resolveFallbackParameters returns the parameters of the CPU fallback profile
@@ -391,6 +399,17 @@ func (u *UnifiedTranscriptionService) processSingleTrackJob(ctx context.Context,
 	if transcriptResult != nil {
 		if err := u.saveTranscriptionResults(job.ID, transcriptResult); err != nil {
 			return fmt.Errorf("failed to save transcription results: %w", err)
+		}
+
+		// Naming diarized speakers from enrolled voice profiles is an additive
+		// enrichment of a job that is already complete and correct. Every
+		// execution path converges here, and any failure is logged and
+		// discarded: identification must never fail, retry, delay or re-queue
+		// the job it enriches.
+		if u.speakerIdentifier != nil {
+			if err := u.speakerIdentifier.IdentifySpeakers(ctx, job, transcriptResult); err != nil {
+				logger.Warn("Speaker identification did not complete", "job_id", job.ID, "error", err)
+			}
 		}
 	}
 
