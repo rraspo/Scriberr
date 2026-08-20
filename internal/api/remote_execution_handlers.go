@@ -14,6 +14,22 @@ import (
 
 const remoteHealthMaxTimeout = 5 * time.Second
 
+// remoteHealthCacheTTL bounds how often reachability is actually probed. The
+// frontend polls this endpoint from every open tab, and each probe dials the
+// remote host's SSH port — traffic that can keep a wake-capable GPU host from
+// ever sleeping. Serving a cached answer keeps the indicator honest enough
+// while capping the dial rate.
+const remoteHealthCacheTTL = 5 * time.Minute
+
+// remoteHealthCacheState holds one handler's cached reachability answer. Its
+// zero value is an expired cache, so a freshly constructed handler probes on
+// first request.
+type remoteHealthCacheState struct {
+	sync.Mutex
+	response  RemoteExecutionHealthResponse
+	fetchedAt time.Time
+}
+
 // RemoteHostHealth reports reachability of one distinct remote SSH endpoint.
 type RemoteHostHealth struct {
 	Host      string `json:"host"`
@@ -39,6 +55,15 @@ type RemoteExecutionHealthResponse struct {
 // @Security ApiKeyAuth
 // @Security BearerAuth
 func (h *Handler) RemoteExecutionHealth(c *gin.Context) {
+	h.remoteHealthCache.Lock()
+	if !h.remoteHealthCache.fetchedAt.IsZero() && time.Since(h.remoteHealthCache.fetchedAt) < remoteHealthCacheTTL {
+		cached := h.remoteHealthCache.response
+		h.remoteHealthCache.Unlock()
+		c.JSON(http.StatusOK, cached)
+		return
+	}
+	h.remoteHealthCache.Unlock()
+
 	profiles, _, err := h.profileRepo.List(c.Request.Context(), 0, 1000)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list profiles"})
@@ -97,6 +122,12 @@ func (h *Handler) RemoteExecutionHealth(c *gin.Context) {
 			break
 		}
 	}
+
+	h.remoteHealthCache.Lock()
+	h.remoteHealthCache.response = response
+	h.remoteHealthCache.fetchedAt = time.Now()
+	h.remoteHealthCache.Unlock()
+
 	c.JSON(http.StatusOK, response)
 }
 

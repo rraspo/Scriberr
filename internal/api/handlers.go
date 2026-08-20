@@ -55,6 +55,8 @@ type Handler struct {
 	quickTranscription        *transcription.QuickTranscriptionService
 	multiTrackProcessor       *processing.MultiTrackProcessor
 	broadcaster               *sse.Broadcaster
+
+	remoteHealthCache remoteHealthCacheState
 }
 
 // NewHandler creates a new handler
