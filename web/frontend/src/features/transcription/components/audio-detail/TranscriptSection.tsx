@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo } from "react";
+import { useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { TranscriptView } from "@/components/transcript/TranscriptView";
@@ -11,14 +11,14 @@ import { TranscriptSelectionMenu } from "./TranscriptSelectionMenu";
 import { NoteEditorDialog } from "./NoteEditorDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useIsDesktop } from "@/hooks/useIsDesktop";
-import { X, StickyNote } from "lucide-react";
+import { useTranscriptSeekHint } from "@/hooks/use-transcript-seek-hint";
+import { X, StickyNote, Hand } from "lucide-react";
 import { computeWordOffsets } from "@/features/transcription/hooks/useKaraokeHighlight";
 import type { Transcript } from "@/features/transcription/hooks/useAudioDetail";
 import { cn } from "@/lib/utils";
 
 interface TranscriptSectionProps {
     audioId: string;
-    currentWordIndex: number | null;
     currentTime: number;
     isPlaying: boolean;
     onSeek: (time: number) => void;
@@ -38,7 +38,6 @@ interface TranscriptSectionProps {
 
 export function TranscriptSection({
     audioId,
-    currentWordIndex,
     currentTime,
     isPlaying,
     onSeek,
@@ -67,7 +66,6 @@ export function TranscriptSection({
 
     // Refs
     const transcriptRef = useRef<HTMLDivElement>(null);
-    const highlightedWordRef = useRef<HTMLSpanElement>(null);
 
     // Compute offsets for selection logic
     const words = useMemo(() => transcript?.word_segments || [], [transcript?.word_segments]);
@@ -81,47 +79,14 @@ export function TranscriptSection({
         closeEditor
     } = useSelectionMenu(transcriptRef, offsets);
 
-    // Auto-scroll logic
-    useEffect(() => {
-        if (currentWordIndex !== null && highlightedWordRef.current && autoScrollEnabled) {
-            const highlightedElement = highlightedWordRef.current;
-            const highlightedRect = highlightedElement.getBoundingClientRect();
-            const viewportHeight = window.innerHeight;
-            const buffer = viewportHeight * 0.2; // 20%
-            const isAboveView = highlightedRect.top < buffer;
-            const isBelowView = highlightedRect.bottom > (viewportHeight - buffer);
-
-            if (isAboveView || isBelowView) {
-                highlightedElement.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'center',
-                });
-            }
-        }
-    }, [currentWordIndex, autoScrollEnabled]);
-
-    useEffect(() => {
-        // Only enable click-to-seek on desktop devices with fine pointer
-        if (!isDesktop) return;
-        const el = transcriptRef.current;
-        if (!el) return;
-        const onClick = (e: MouseEvent) => {
-            if (!(e.metaKey || e.ctrlKey)) return;
-            const target = e.target as HTMLElement | null;
-            if (!target) return;
-            const wordEl = target.closest('span[data-word-index]') as HTMLElement | null;
-            if (!wordEl) return;
-            const startAttr = wordEl.getAttribute('data-start');
-            const start = startAttr ? parseFloat(startAttr) : NaN;
-            if (isNaN(start)) return;
-
-            e.preventDefault();
-            e.stopPropagation();
-            onSeek(start);
-        };
-        el.addEventListener('click', onClick);
-        return () => el.removeEventListener('click', onClick);
-    }, [onSeek, isDesktop]);
+    // Click-to-seek discoverability hint. Desktop communicates clickability through the
+    // hover cursor in TranscriptView; touch devices have no hover state, so they get an
+    // explicit, dismissible, first-visit hint instead.
+    const { shouldShowHint, markHintShown } = useTranscriptSeekHint();
+    const handleSeek = useCallback((time: number) => {
+        markHintShown();
+        onSeek(time);
+    }, [markHintShown, onSeek]);
 
     // Helpers
     const getDetectedSpeakers = () => {
@@ -175,6 +140,24 @@ export function TranscriptSection({
                     userSelect: 'text'
                 }}
             >
+                {/* Touch discoverability hint: desktop shows clickability via hover, touch has
+                    no hover state, so first-time touch visitors get an explicit callout. */}
+                {!isDesktop && shouldShowHint && (
+                    <div className="mb-3 flex items-center justify-between gap-3 rounded-[var(--radius-btn)] border border-[var(--border-subtle)] bg-[var(--brand-light)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+                        <div className="flex items-center gap-2">
+                            <Hand className="h-4 w-4 flex-shrink-0 text-[var(--brand-solid)]" />
+                            <span>Tap a word to jump to that point in the audio.</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={markHintShown}
+                            className="flex-shrink-0 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                            aria-label="Dismiss hint"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                )}
                 <div className="w-full text-[var(--text-secondary)] leading-relaxed">
                     <div
                         ref={transcriptRef}
@@ -187,12 +170,10 @@ export function TranscriptSection({
                         <TranscriptView
                             transcript={transcript}
                             mode={transcriptMode}
-                            currentWordIndex={currentWordIndex}
                             currentTime={currentTime}
                             isPlaying={isPlaying}
                             notes={notes}
-                            onSeek={onSeek}
-                            highlightedWordRef={highlightedWordRef}
+                            onSeek={handleSeek}
                             speakerMappings={speakerMappings}
                             autoScrollEnabled={autoScrollEnabled}
                         />

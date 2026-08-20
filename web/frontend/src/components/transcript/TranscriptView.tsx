@@ -1,8 +1,22 @@
-import { forwardRef, useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import { forwardRef, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { useKaraokeHighlight, computeWordOffsets, findActiveWordIndex } from '@/features/transcription/hooks/useKaraokeHighlight';
 import { cn } from '@/lib/utils';
-import { useIsDesktop } from '@/hooks/useIsDesktop';
 import type { Note } from '@/types/note';
+
+// Walks up the DOM to find the nearest ancestor that actually scrolls,
+// falling back to the window when the content isn't clipped by an inner container.
+function getScrollParent(node: HTMLElement | null): HTMLElement | null {
+    let current = node?.parentElement || null;
+    while (current) {
+        const style = window.getComputedStyle(current);
+        if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && current.scrollHeight > current.clientHeight) {
+            return current;
+        }
+        current = current.parentElement;
+    }
+    return null;
+}
 
 // Helper for cross-browser caret position
 function getCaretOffsetFromPoint(x: number, y: number) {
@@ -41,11 +55,9 @@ interface Transcript {
 interface TranscriptViewProps {
     transcript: Transcript | null;
     mode: 'compact' | 'expanded';
-    currentWordIndex: number | null;
     currentTime: number;
     isPlaying: boolean;
     notes: Note[];
-    highlightedWordRef: React.RefObject<HTMLSpanElement | null>;
     speakerMappings: Record<string, string>;
     autoScrollEnabled: boolean;
     onSeek: (time: number) => void;
@@ -55,11 +67,9 @@ interface TranscriptViewProps {
 export const TranscriptView = forwardRef<HTMLDivElement, TranscriptViewProps>(({
     transcript,
     mode,
-    // currentWordIndex,
     currentTime,
     isPlaying,
     // notes,
-    // highlightedWordRef,
     speakerMappings,
     autoScrollEnabled,
     onSeek,
@@ -71,8 +81,7 @@ export const TranscriptView = forwardRef<HTMLDivElement, TranscriptViewProps>(({
     };
 
     const containerRef = useRef<HTMLDivElement>(null);
-    const [isModifierPressed, setIsModifierPressed] = useState(false);
-    const isDesktop = useIsDesktop();
+    const prefersReducedMotion = useReducedMotion();
 
     // Use CSS Highlight API for Compact Mode
     // Note: We only use this hook when in compact mode to save resources
@@ -84,10 +93,12 @@ export const TranscriptView = forwardRef<HTMLDivElement, TranscriptViewProps>(({
         isPlaying
     );
 
-    // Click-to-Seek Handler
+    // Click-to-Seek Handler. A plain click seeks; Ctrl/Cmd+click keeps working the
+    // same way since no modifier check gates it anymore. Skipped while the user has
+    // an active text selection so seeking doesn't fight the note-taking selection flow.
     const handleWordClick = useCallback((e: React.MouseEvent) => {
-        // Only trigger if Cmd (Mac) or Ctrl (Windows) is held
-        if (!e.metaKey && !e.ctrlKey) return;
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed && selection.toString().length > 0) return;
 
         const clickOffset = getCaretOffsetFromPoint(e.clientX, e.clientY);
         if (clickOffset === null) return;
@@ -102,22 +113,56 @@ export const TranscriptView = forwardRef<HTMLDivElement, TranscriptViewProps>(({
         }
     }, [offsets, onSeek]);
 
-    // Keyboard listener for modifier key visual cue
+    // Auto-scroll to the active word during playback (Compact View).
+    // Compact mode renders the transcript as one text node highlighted via the CSS
+    // Custom Highlight API, so there is no per-word element to attach a ref to -
+    // the active word's position is derived straight from currentTime instead,
+    // the same way the highlight itself is computed, which keeps this correct
+    // regardless of transcript length.
+    const prevAutoScrolledWordRef = useRef<number>(-1);
     useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Meta' || e.key === 'Control') setIsModifierPressed(true);
-        };
-        const handleKeyUp = (e: KeyboardEvent) => {
-            if (e.key === 'Meta' || e.key === 'Control') setIsModifierPressed(false);
-        };
+        if (mode !== 'compact' || !autoScrollEnabled || !isPlaying) return;
+        const container = containerRef.current;
+        if (!container) return;
 
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-        };
-    }, []);
+        const activeIndex = findActiveWordIndex(offsets, currentTime);
+        if (activeIndex === -1) return;
+        if (activeIndex === prevAutoScrolledWordRef.current) return;
+
+        const activeWord = offsets[activeIndex];
+        const textNode = container.firstChild;
+        if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
+        if (activeWord.endChar > (textNode as Text).length) return;
+
+        try {
+            const range = new Range();
+            range.setStart(textNode, activeWord.startChar);
+            range.setEnd(textNode, activeWord.endChar);
+            const rect = range.getBoundingClientRect();
+            if (rect.width === 0 && rect.height === 0) return;
+
+            const viewportHeight = window.innerHeight;
+            const buffer = viewportHeight * 0.2;
+            const isAboveView = rect.top < buffer;
+            const isBelowView = rect.bottom > (viewportHeight - buffer);
+
+            if (isAboveView || isBelowView) {
+                prevAutoScrolledWordRef.current = activeIndex;
+                const behavior: ScrollBehavior = prefersReducedMotion ? 'auto' : 'smooth';
+                const scrollParent = getScrollParent(container);
+                const scrollOffset = rect.top - viewportHeight / 2;
+                if (scrollParent) {
+                    scrollParent.scrollBy({ top: scrollOffset, behavior });
+                } else {
+                    window.scrollBy({ top: scrollOffset, behavior });
+                }
+            } else {
+                prevAutoScrolledWordRef.current = activeIndex;
+            }
+        } catch {
+            // Ignore range errors (can happen transiently if content reflows mid-computation)
+        }
+    }, [currentTime, isPlaying, mode, autoScrollEnabled, offsets, prefersReducedMotion]);
 
     // Expanded View Logic
     const segmentRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -166,9 +211,9 @@ export const TranscriptView = forwardRef<HTMLDivElement, TranscriptViewProps>(({
 
         const el = segmentRefs.current[activeSegmentIndex];
         if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
         }
-    }, [activeSegmentIndex, autoScrollEnabled, isPlaying, mode]);
+    }, [activeSegmentIndex, autoScrollEnabled, isPlaying, mode, prefersReducedMotion]);
 
     // 2. Highlight Effect for Expanded View
     useEffect(() => {
@@ -219,9 +264,11 @@ export const TranscriptView = forwardRef<HTMLDivElement, TranscriptViewProps>(({
 
     }, [currentTime, isPlaying, mode, expandedData]);
 
-    // 3. Click Handler for Expanded View
+    // 3. Click Handler for Expanded View. Same plain-click-seeks behavior as the
+    // compact view; Ctrl/Cmd+click still works since nothing gates on it anymore.
     const handleExpandedClick = useCallback((e: React.MouseEvent, segmentIndex: number) => {
-        if (!e.metaKey && !e.ctrlKey) return;
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed && selection.toString().length > 0) return;
 
         const clickOffset = getCaretOffsetFromPoint(e.clientX, e.clientY);
         if (clickOffset === null) return;
@@ -256,10 +303,9 @@ export const TranscriptView = forwardRef<HTMLDivElement, TranscriptViewProps>(({
         return (
             <div
                 ref={containerRef}
-                onClick={isDesktop ? handleWordClick : undefined}
+                onClick={handleWordClick}
                 className={cn(
-                    "text-lg leading-relaxed text-carbon-700 dark:text-carbon-300 whitespace-pre-wrap font-reading selection:bg-orange-500/30 transition-colors duration-200 select-text",
-                    isDesktop && isModifierPressed ? 'cursor-pointer hover:text-carbon-900 dark:hover:text-carbon-100' : 'cursor-text'
+                    "text-lg leading-relaxed text-carbon-700 dark:text-carbon-300 whitespace-pre-wrap font-reading selection:bg-orange-500/30 transition-colors duration-200 select-text cursor-pointer hover:text-carbon-900 dark:hover:text-carbon-100"
                 )}
                 style={{
                     // CRITICAL: Enable native text selection on iOS/Android
@@ -317,10 +363,9 @@ export const TranscriptView = forwardRef<HTMLDivElement, TranscriptViewProps>(({
                         {/* Text */}
                         <div
                             ref={(el) => { segmentRefs.current[i] = el; }}
-                            onClick={isDesktop ? (e) => handleExpandedClick(e, i) : undefined}
+                            onClick={(e) => handleExpandedClick(e, i)}
                             className={cn(
-                                "flex-grow text-base text-primary leading-relaxed whitespace-pre-wrap font-reading transition-colors duration-200 select-text",
-                                isDesktop && isModifierPressed ? 'cursor-pointer hover:text-carbon-900 dark:hover:text-carbon-100' : 'cursor-text'
+                                "flex-grow text-base text-primary leading-relaxed whitespace-pre-wrap font-reading transition-colors duration-200 select-text cursor-pointer hover:text-carbon-900 dark:hover:text-carbon-100"
                             )}
                             style={{
                                 // CRITICAL: Enable native text selection on iOS/Android

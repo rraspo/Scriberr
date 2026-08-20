@@ -470,23 +470,12 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
     );
 };
 
-// Wrapper to handle transcript word index calculation without polluting main view
-// Wrapper to handle word index calc
+// Thin wrapper kept for prop grouping consistency with the rest of the view.
 function TranscriptSectionWrapper({ audioId, currentTime, transcript, isPlaying, ...props }: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-    // If transcript not passed (loading?), handle it
-    let currentWordIndex = null;
-    if (transcript?.word_segments) {
-        // Simple linear find for now.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const idx = transcript.word_segments.findIndex((w: any) => w.start <= currentTime && w.end >= currentTime);
-        if (idx !== -1) currentWordIndex = idx;
-    }
-
     return (
         <TranscriptSection
             audioId={audioId}
             currentTime={currentTime}
-            currentWordIndex={currentWordIndex}
             transcript={transcript}
             isPlaying={isPlaying}
             className="font-transcript"
