@@ -1,16 +1,18 @@
 // Tiny external store for remote-execution health and the user's toggle
 // preference. Designed for React's useSyncExternalStore.
-
-export interface RemoteExecutionHost {
-	host: string;
-	port: number;
-	reachable: boolean;
-}
+//
+// Health is a last-known observation reported by the backend (from a real job
+// run or an explicit check), never a live probe: unsolicited probing can wake
+// a sleeping wake-on-LAN GPU host. "Unknown" is therefore a normal state, and
+// job routing must not treat it as unreachable - the backend falls back to
+// local execution on its own when the remote host is actually down.
 
 export interface RemoteExecutionHealth {
 	hasRemote: boolean;
+	known: boolean;
 	reachable: boolean;
-	hosts: RemoteExecutionHost[];
+	source: string;
+	checkedAt: string | null;
 }
 
 interface RemoteExecutionState {
@@ -68,10 +70,6 @@ export function setRemoteExecutionPreference(enabled: boolean): void {
 	emitChange();
 }
 
-export function isRemoteExecutionActive(): boolean {
-	return state.preferenceEnabled && state.health?.reachable === true;
-}
-
 export function buildStartTranscriptionUrl(jobId: string, profileId?: string): string {
 	const queryParts: string[] = [];
 
@@ -79,7 +77,10 @@ export function buildStartTranscriptionUrl(jobId: string, profileId?: string): s
 		queryParts.push(`profile_id=${encodeURIComponent(profileId)}`);
 	}
 
-	if (!isRemoteExecutionActive()) {
+	// Only an explicit user preference forces local execution. Last-known
+	// reachability does not gate routing: the backend's own fallback handles
+	// an unreachable host, and the attempt refreshes the health observation.
+	if (!state.preferenceEnabled) {
 		queryParts.push("execution_mode=local");
 	}
 

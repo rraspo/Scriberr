@@ -162,6 +162,7 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 			transcription.GET("/list", handler.ListTranscriptionJobs)
 			transcription.GET("/models", handler.GetSupportedModels)
 			transcription.GET("/remote-execution/health", handler.RemoteExecutionHealth)
+			transcription.POST("/remote-execution/health/check", handler.RemoteExecutionHealthCheck)
 			// Notes for a transcription
 			transcription.GET("/:id/notes", handler.ListNotes)
 			transcription.POST("/:id/notes", handler.CreateNote)

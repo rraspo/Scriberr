@@ -9,73 +9,46 @@ import (
 	"sync"
 	"time"
 
+	"scriberr/internal/remotehealth"
+
 	"github.com/gin-gonic/gin"
 )
 
 const remoteHealthMaxTimeout = 5 * time.Second
 
-// remoteHealthCacheTTL bounds how often reachability is actually probed. The
-// frontend polls this endpoint from every open tab, and each probe dials the
-// remote host's SSH port — traffic that can keep a wake-capable GPU host from
-// ever sleeping. Serving a cached answer keeps the indicator honest enough
-// while capping the dial rate.
-const remoteHealthCacheTTL = 5 * time.Minute
-
-// remoteHealthCacheState holds one handler's cached reachability answer. Its
-// zero value is an expired cache, so a freshly constructed handler probes on
-// first request.
-type remoteHealthCacheState struct {
-	sync.Mutex
-	response  RemoteExecutionHealthResponse
-	fetchedAt time.Time
-}
-
-// RemoteHostHealth reports reachability of one distinct remote SSH endpoint.
-type RemoteHostHealth struct {
-	Host      string `json:"host"`
-	Port      int    `json:"port"`
-	Reachable bool   `json:"reachable"`
-}
-
-// RemoteExecutionHealthResponse reports whether remote execution is currently
-// available. Reachable is true only when every distinct remote endpoint
-// referenced by a remote-mode profile answers with an SSH banner.
+// RemoteExecutionHealthResponse reports the last known reachability of the
+// remote execution host set. Reachability is an observation from a real
+// contact (a job run or an explicit check), never a background probe: probing
+// on page load or on a poll can wake a sleeping wake-on-LAN GPU host, so the
+// passive endpoint reports staleness instead of refreshing on its own.
 type RemoteExecutionHealthResponse struct {
-	HasRemote bool               `json:"has_remote"`
-	Reachable bool               `json:"reachable"`
-	Hosts     []RemoteHostHealth `json:"hosts"`
+	HasRemote bool       `json:"has_remote"`
+	Known     bool       `json:"known"`
+	Reachable bool       `json:"reachable"`
+	Source    string     `json:"source,omitempty"`
+	CheckedAt *time.Time `json:"checked_at,omitempty"`
 }
 
-// @Summary Remote execution health
-// @Description Check whether the remote SSH hosts referenced by remote-mode profiles are reachable
-// @Tags transcription
-// @Produce json
-// @Success 200 {object} RemoteExecutionHealthResponse
-// @Router /api/v1/transcription/remote-execution/health [get]
-// @Security ApiKeyAuth
-// @Security BearerAuth
-func (h *Handler) RemoteExecutionHealth(c *gin.Context) {
-	h.remoteHealthCache.Lock()
-	if !h.remoteHealthCache.fetchedAt.IsZero() && time.Since(h.remoteHealthCache.fetchedAt) < remoteHealthCacheTTL {
-		cached := h.remoteHealthCache.response
-		h.remoteHealthCache.Unlock()
-		c.JSON(http.StatusOK, cached)
-		return
+func remoteHealthResponseFromObservation(hasRemote bool) RemoteExecutionHealthResponse {
+	response := RemoteExecutionHealthResponse{HasRemote: hasRemote}
+	if observation, known := remotehealth.Last(); known {
+		response.Known = true
+		response.Reachable = observation.Reachable
+		response.Source = observation.Source
+		checkedAt := observation.At
+		response.CheckedAt = &checkedAt
 	}
-	h.remoteHealthCache.Unlock()
+	return response
+}
 
+func (h *Handler) hasRemoteProfiles(c *gin.Context) (bool, []remoteEndpoint, bool) {
 	profiles, _, err := h.profileRepo.List(c.Request.Context(), 0, 1000)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list profiles"})
-		return
+		return false, nil, false
 	}
 
-	type endpoint struct {
-		host    string
-		port    int
-		timeout time.Duration
-	}
-	endpoints := make(map[string]endpoint)
+	endpoints := make(map[string]remoteEndpoint)
 	for _, profile := range profiles {
 		if profile.ExecutionMode != "remote" || strings.TrimSpace(profile.RemoteHost) == "" {
 			continue
@@ -89,46 +62,79 @@ func (h *Handler) RemoteExecutionHealth(c *gin.Context) {
 			timeout = remoteHealthMaxTimeout
 		}
 		key := net.JoinHostPort(profile.RemoteHost, fmt.Sprintf("%d", port))
-		endpoints[key] = endpoint{host: profile.RemoteHost, port: port, timeout: timeout}
+		endpoints[key] = remoteEndpoint{host: profile.RemoteHost, port: port, timeout: timeout}
 	}
 
-	response := RemoteExecutionHealthResponse{Hosts: []RemoteHostHealth{}}
-	if len(endpoints) == 0 {
-		c.JSON(http.StatusOK, response)
+	targets := make([]remoteEndpoint, 0, len(endpoints))
+	for _, target := range endpoints {
+		targets = append(targets, target)
+	}
+	return len(targets) > 0, targets, true
+}
+
+type remoteEndpoint struct {
+	host    string
+	port    int
+	timeout time.Duration
+}
+
+// RemoteExecutionHealth reports the last known remote reachability without
+// contacting the remote host.
+// @Summary Remote execution health
+// @Description Report the last known reachability of the remote SSH hosts referenced by remote-mode profiles, without contacting them
+// @Tags transcription
+// @Produce json
+// @Success 200 {object} RemoteExecutionHealthResponse
+// @Router /api/v1/transcription/remote-execution/health [get]
+// @Security ApiKeyAuth
+// @Security BearerAuth
+func (h *Handler) RemoteExecutionHealth(c *gin.Context) {
+	hasRemote, _, ok := h.hasRemoteProfiles(c)
+	if !ok {
 		return
 	}
-	response.HasRemote = true
+	c.JSON(http.StatusOK, remoteHealthResponseFromObservation(hasRemote))
+}
 
+// RemoteExecutionHealthCheck probes the remote hosts once, on explicit
+// request, and records the result as the current observation.
+// @Summary Check remote execution health now
+// @Description Probe the remote SSH hosts referenced by remote-mode profiles once and record the observation
+// @Tags transcription
+// @Produce json
+// @Success 200 {object} RemoteExecutionHealthResponse
+// @Router /api/v1/transcription/remote-execution/health/check [post]
+// @Security ApiKeyAuth
+// @Security BearerAuth
+func (h *Handler) RemoteExecutionHealthCheck(c *gin.Context) {
+	hasRemote, targets, ok := h.hasRemoteProfiles(c)
+	if !ok {
+		return
+	}
+	if !hasRemote {
+		c.JSON(http.StatusOK, RemoteExecutionHealthResponse{HasRemote: false})
+		return
+	}
+
+	allReachable := true
 	var mutex sync.Mutex
 	var waitGroup sync.WaitGroup
-	for _, target := range endpoints {
+	for _, target := range targets {
 		waitGroup.Add(1)
-		go func(target endpoint) {
+		go func(target remoteEndpoint) {
 			defer waitGroup.Done()
 			reachable := sshEndpointReachable(target.host, target.port, target.timeout)
 			mutex.Lock()
-			response.Hosts = append(response.Hosts, RemoteHostHealth{
-				Host: target.host, Port: target.port, Reachable: reachable,
-			})
+			if !reachable {
+				allReachable = false
+			}
 			mutex.Unlock()
 		}(target)
 	}
 	waitGroup.Wait()
 
-	response.Reachable = true
-	for _, host := range response.Hosts {
-		if !host.Reachable {
-			response.Reachable = false
-			break
-		}
-	}
-
-	h.remoteHealthCache.Lock()
-	h.remoteHealthCache.response = response
-	h.remoteHealthCache.fetchedAt = time.Now()
-	h.remoteHealthCache.Unlock()
-
-	c.JSON(http.StatusOK, response)
+	remotehealth.Record(allReachable, "check")
+	c.JSON(http.StatusOK, remoteHealthResponseFromObservation(true))
 }
 
 // sshEndpointReachable dials the endpoint and confirms it greets with an SSH

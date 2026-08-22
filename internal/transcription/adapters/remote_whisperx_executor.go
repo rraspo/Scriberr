@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"scriberr/internal/models"
+	"scriberr/internal/remotehealth"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -111,9 +112,15 @@ func (e *RemoteWhisperXExecutor) Execute(ctx context.Context, jobID, audioPath s
 	defer audio.Close()
 	if err := e.transport.Exec(ctx, e.submitCommand(jobID, params), audio, logFile, logFile); err != nil {
 		failure := &RemoteFailure{Stage: "submit", Err: err}
-		shouldCleanup = !classifyRemoteFailure(failure).Fallback
+		fallback := classifyRemoteFailure(failure).Fallback
+		// A fallback-class failure means the host itself was unavailable; a
+		// job-level failure means it answered. Either way the attempt is a
+		// reachability observation this deployment gets for free.
+		remotehealth.Record(!fallback, "job")
+		shouldCleanup = !fallback
 		return failure
 	}
+	remotehealth.Record(true, "job")
 	shouldCleanup = true
 
 	var archive bytes.Buffer

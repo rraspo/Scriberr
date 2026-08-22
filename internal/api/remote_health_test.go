@@ -6,11 +6,13 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"scriberr/internal/models"
+	"scriberr/internal/remotehealth"
 	"scriberr/internal/repository"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +24,8 @@ import (
 func newRemoteHealthTestHandler(t *testing.T) (*Handler, *gorm.DB) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
+	remotehealth.Reset()
+	t.Cleanup(remotehealth.Reset)
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
@@ -29,35 +33,37 @@ func newRemoteHealthTestHandler(t *testing.T) (*Handler, *gorm.DB) {
 	return &Handler{profileRepo: repository.NewProfileRepository(db)}, db
 }
 
-func performRemoteHealthRequest(t *testing.T, handler *Handler) *httptest.ResponseRecorder {
+func performRemoteHealthRequest(t *testing.T, handler *Handler, method string, handlerFunc gin.HandlerFunc) *httptest.ResponseRecorder {
 	t.Helper()
 	recorder := httptest.NewRecorder()
-	context, _ := gin.CreateTestContext(recorder)
-	context.Request = httptest.NewRequest(http.MethodGet, "/remote-execution/health", nil)
-	handler.RemoteExecutionHealth(context)
+	requestContext, _ := gin.CreateTestContext(recorder)
+	requestContext.Request = httptest.NewRequest(method, "/remote-execution/health", nil)
+	handlerFunc(requestContext)
 	return recorder
 }
 
-// startFakeSSHServer listens on a loopback port and writes an SSH banner to
-// every connection, imitating the only part of an SSH server the health check
-// reads.
-func startFakeSSHServer(t *testing.T) (host string, port int) {
+// startFakeSSHServer listens on a loopback port, writes an SSH banner to every
+// connection, and counts how many connections it ever received - the count is
+// what proves the passive endpoint generates no traffic.
+func startFakeSSHServer(t *testing.T) (host string, port int, connections *atomic.Int64) {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = listener.Close() })
+	connections = &atomic.Int64{}
 	go func() {
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
 				return
 			}
+			connections.Add(1)
 			_, _ = conn.Write([]byte("SSH-2.0-FakeServer\r\n"))
 			_ = conn.Close()
 		}
 	}()
 	addr := listener.Addr().(*net.TCPAddr)
-	return addr.IP.String(), addr.Port
+	return addr.IP.String(), addr.Port, connections
 }
 
 func createRemoteHealthProfile(t *testing.T, db *gorm.DB, id, host string, port int) {
@@ -70,79 +76,90 @@ func createRemoteHealthProfile(t *testing.T, db *gorm.DB, id, host string, port 
 	}).Error)
 }
 
-type remoteHealthResponse struct {
-	HasRemote bool `json:"has_remote"`
-	Reachable bool `json:"reachable"`
-	Hosts     []struct {
-		Host      string `json:"host"`
-		Port      int    `json:"port"`
-		Reachable bool   `json:"reachable"`
-	} `json:"hosts"`
+type remoteHealthTestResponse struct {
+	HasRemote bool       `json:"has_remote"`
+	Known     bool       `json:"known"`
+	Reachable bool       `json:"reachable"`
+	Source    string     `json:"source"`
+	CheckedAt *time.Time `json:"checked_at"`
 }
 
-func TestRemoteExecutionHealthReachable(t *testing.T) {
-	handler, db := newRemoteHealthTestHandler(t)
-	host, port := startFakeSSHServer(t)
-	createRemoteHealthProfile(t, db, "reachable-profile", host, port)
+func decodeRemoteHealthResponse(t *testing.T, recorder *httptest.ResponseRecorder) remoteHealthTestResponse {
+	t.Helper()
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	var body remoteHealthTestResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	return body
+}
 
-	response := performRemoteHealthRequest(t, handler)
-	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	var body remoteHealthResponse
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+func TestRemoteExecutionHealthNeverContactsTheRemoteHost(t *testing.T) {
+	handler, db := newRemoteHealthTestHandler(t)
+	host, port, connections := startFakeSSHServer(t)
+	createRemoteHealthProfile(t, db, "passive-profile", host, port)
+
+	body := decodeRemoteHealthResponse(t, performRemoteHealthRequest(t, handler, http.MethodGet, handler.RemoteExecutionHealth))
 	require.True(t, body.HasRemote)
-	require.True(t, body.Reachable)
-	require.Len(t, body.Hosts, 1)
-	require.True(t, body.Hosts[0].Reachable)
+	require.False(t, body.Known, "no observation exists yet, and the passive endpoint must not create one")
+	require.Nil(t, body.CheckedAt)
+	require.EqualValues(t, 0, connections.Load(), "the passive endpoint must never dial the remote host")
 }
 
-func TestRemoteExecutionHealthUnreachable(t *testing.T) {
+func TestRemoteExecutionHealthCheckProbesOnceAndRecords(t *testing.T) {
 	handler, db := newRemoteHealthTestHandler(t)
-	// Grab a loopback port and close it again so nothing is listening there.
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	host, port, connections := startFakeSSHServer(t)
+	createRemoteHealthProfile(t, db, "check-profile", host, port)
+
+	checked := decodeRemoteHealthResponse(t, performRemoteHealthRequest(t, handler, http.MethodPost, handler.RemoteExecutionHealthCheck))
+	require.True(t, checked.HasRemote)
+	require.True(t, checked.Known)
+	require.True(t, checked.Reachable)
+	require.Equal(t, "check", checked.Source)
+	require.NotNil(t, checked.CheckedAt)
+	require.EqualValues(t, 1, connections.Load())
+
+	passive := decodeRemoteHealthResponse(t, performRemoteHealthRequest(t, handler, http.MethodGet, handler.RemoteExecutionHealth))
+	require.True(t, passive.Known)
+	require.True(t, passive.Reachable)
+	require.Equal(t, "check", passive.Source)
+	require.EqualValues(t, 1, connections.Load(), "reading the passive endpoint after a check must not dial again")
+}
+
+func TestRemoteExecutionHealthCheckUnreachableHostRecordsUnreachable(t *testing.T) {
+	handler, db := newRemoteHealthTestHandler(t)
+	// A closed port on loopback refuses immediately.
+	closedListener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	closedPort := listener.Addr().(*net.TCPAddr).Port
-	require.NoError(t, listener.Close())
-	createRemoteHealthProfile(t, db, "unreachable-profile", "127.0.0.1", closedPort)
+	closedAddr := closedListener.Addr().(*net.TCPAddr)
+	require.NoError(t, closedListener.Close())
+	createRemoteHealthProfile(t, db, "unreachable-profile", closedAddr.IP.String(), closedAddr.Port)
 
-	response := performRemoteHealthRequest(t, handler)
-	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	var body remoteHealthResponse
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
-	require.True(t, body.HasRemote)
+	checked := decodeRemoteHealthResponse(t, performRemoteHealthRequest(t, handler, http.MethodPost, handler.RemoteExecutionHealthCheck))
+	require.True(t, checked.Known)
+	require.False(t, checked.Reachable)
+	require.Equal(t, "check", checked.Source)
+}
+
+func TestRemoteExecutionHealthSurfacesJobObservations(t *testing.T) {
+	handler, db := newRemoteHealthTestHandler(t)
+	host, port, connections := startFakeSSHServer(t)
+	createRemoteHealthProfile(t, db, "job-observed-profile", host, port)
+
+	remotehealth.Record(false, "job")
+
+	body := decodeRemoteHealthResponse(t, performRemoteHealthRequest(t, handler, http.MethodGet, handler.RemoteExecutionHealth))
+	require.True(t, body.Known)
 	require.False(t, body.Reachable)
-}
-
-func TestRemoteExecutionHealthNonSSHServiceIsUnreachable(t *testing.T) {
-	handler, db := newRemoteHealthTestHandler(t)
-	// An HTTP server accepts TCP connections but never sends an SSH banner.
-	httpServer := httptest.NewServer(http.NotFoundHandler())
-	t.Cleanup(httpServer.Close)
-	addr := strings.TrimPrefix(httpServer.URL, "http://")
-	host, portText, err := net.SplitHostPort(addr)
-	require.NoError(t, err)
-	port, err := strconv.Atoi(portText)
-	require.NoError(t, err)
-	createRemoteHealthProfile(t, db, "non-ssh-profile", host, port)
-
-	response := performRemoteHealthRequest(t, handler)
-	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	var body remoteHealthResponse
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
-	require.True(t, body.HasRemote)
-	require.False(t, body.Reachable)
+	require.Equal(t, "job", body.Source)
+	require.EqualValues(t, 0, connections.Load())
 }
 
 func TestRemoteExecutionHealthWithoutRemoteProfiles(t *testing.T) {
-	handler, db := newRemoteHealthTestHandler(t)
-	require.NoError(t, db.Create(&models.TranscriptionProfile{
-		ID: "local-profile", Name: "Local", ExecutionMode: "local",
-	}).Error)
+	handler, _ := newRemoteHealthTestHandler(t)
 
-	response := performRemoteHealthRequest(t, handler)
-	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	var body remoteHealthResponse
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	body := decodeRemoteHealthResponse(t, performRemoteHealthRequest(t, handler, http.MethodGet, handler.RemoteExecutionHealth))
 	require.False(t, body.HasRemote)
-	require.False(t, body.Reachable)
-	require.Empty(t, body.Hosts)
+
+	checked := decodeRemoteHealthResponse(t, performRemoteHealthRequest(t, handler, http.MethodPost, handler.RemoteExecutionHealthCheck))
+	require.False(t, checked.HasRemote)
+	require.False(t, checked.Known)
 }

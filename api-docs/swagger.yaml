@@ -314,23 +314,16 @@ definitions:
     type: object
   api.RemoteExecutionHealthResponse:
     properties:
+      checked_at:
+        type: string
       has_remote:
         type: boolean
-      hosts:
-        items:
-          $ref: '#/definitions/api.RemoteHostHealth'
-        type: array
+      known:
+        type: boolean
       reachable:
         type: boolean
-    type: object
-  api.RemoteHostHealth:
-    properties:
-      host:
+      source:
         type: string
-      port:
-        type: integer
-      reachable:
-        type: boolean
     type: object
   api.SetUserDefaultProfileRequest:
     properties:
@@ -3179,8 +3172,8 @@ paths:
       - transcription
   /api/v1/transcription/remote-execution/health:
     get:
-      description: Check whether the remote SSH hosts referenced by remote-mode profiles
-        are reachable
+      description: Report the last known reachability of the remote SSH hosts referenced
+        by remote-mode profiles, without contacting them
       produces:
       - application/json
       responses:
@@ -3192,6 +3185,23 @@ paths:
       - ApiKeyAuth: []
       - BearerAuth: []
       summary: Remote execution health
+      tags:
+      - transcription
+  /api/v1/transcription/remote-execution/health/check:
+    post:
+      description: Probe the remote SSH hosts referenced by remote-mode profiles once
+        and record the observation
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RemoteExecutionHealthResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Check remote execution health now
       tags:
       - transcription
   /api/v1/transcription/submit:
