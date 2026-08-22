@@ -2715,7 +2715,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Report the last known reachability of the remote SSH hosts referenced by remote-mode profiles, without contacting them",
+                "description": "Check whether the remote SSH hosts referenced by remote-mode profiles are reachable",
                 "produces": [
                     "application/json"
                 ],
@@ -2723,34 +2723,6 @@ const docTemplate = `{
                     "transcription"
                 ],
                 "summary": "Remote execution health",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.RemoteExecutionHealthResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/transcription/remote-execution/health/check": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    },
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Probe the remote SSH hosts referenced by remote-mode profiles once and record the observation",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "transcription"
-                ],
-                "summary": "Check remote execution health now",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -4801,20 +4773,31 @@ const docTemplate = `{
         "api.RemoteExecutionHealthResponse": {
             "type": "object",
             "properties": {
-                "checked_at": {
-                    "type": "string"
-                },
                 "has_remote": {
                     "type": "boolean"
                 },
-                "known": {
-                    "type": "boolean"
+                "hosts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.RemoteHostHealth"
+                    }
                 },
                 "reachable": {
                     "type": "boolean"
-                },
-                "source": {
+                }
+            }
+        },
+        "api.RemoteHostHealth": {
+            "type": "object",
+            "properties": {
+                "host": {
                     "type": "string"
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "reachable": {
+                    "type": "boolean"
                 }
             }
         },
