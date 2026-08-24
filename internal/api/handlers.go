@@ -1174,8 +1174,8 @@ func (h *Handler) getValidatedTranscriptionParams(c *gin.Context, job *models.Tr
 	return &requestParams, nil
 }
 
-// @Summary Kill running transcription job
-// @Description Cancel a currently running transcription job
+// @Summary Kill running or queued transcription job
+// @Description Cancel a currently running transcription job, or remove a still-pending job from the queue
 // @Tags transcription
 // @Produce json
 // @Param id path string true "Job ID"
@@ -1198,8 +1198,8 @@ func (h *Handler) KillJob(c *gin.Context) {
 		return
 	}
 
-	// Check if job is currently processing
-	if job.Status != models.StatusProcessing {
+	// Only running or still-queued jobs can be cancelled.
+	if job.Status != models.StatusProcessing && job.Status != models.StatusPending {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Job is not currently running"})
 		return
 	}

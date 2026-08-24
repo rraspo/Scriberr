@@ -241,6 +241,7 @@ export const AudioFilesTable = memo(function AudioFilesTable({
 
 	// Dialog state management
 	const [stopDialogOpen, setStopDialogOpen] = useState(false);
+	const [stopError, setStopError] = useState<string | null>(null);
 	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 	const [selectedFile, setSelectedFile] = useState<AudioFile | null>(null);
 
@@ -416,6 +417,7 @@ export const AudioFilesTable = memo(function AudioFilesTable({
 
 	const handleStopClick = useCallback((file: AudioFile) => {
 		setSelectedFile(file);
+		setStopError(null);
 		setStopDialogOpen(true);
 	}, []);
 
@@ -450,6 +452,7 @@ export const AudioFilesTable = memo(function AudioFilesTable({
 
 		try {
 			setKillingJobs((prev) => new Set(prev).add(jobId));
+			setStopError(null);
 
 			const response = await fetch(`/api/v1/transcription/${jobId}/kill`, {
 				method: "POST",
@@ -463,10 +466,18 @@ export const AudioFilesTable = memo(function AudioFilesTable({
 				setStopDialogOpen(false);
 				setSelectedFile(null);
 			} else {
-				alert("Failed to kill transcription job");
+				setStopError(
+					selectedFile.status === "pending"
+						? "Failed to remove the job from the queue"
+						: "Failed to stop transcription job",
+				);
 			}
 		} catch {
-			alert("Error killing transcription job");
+			setStopError(
+				selectedFile.status === "pending"
+					? "Error removing the job from the queue"
+					: "Error stopping transcription job",
+			);
 		} finally {
 			setKillingJobs((prev) => {
 				const newSet = new Set(prev);
@@ -1034,19 +1045,38 @@ export const AudioFilesTable = memo(function AudioFilesTable({
 				loading={transcriptionLoading}
 			/>
 
-			{/* Stop Transcription Dialog */}
-			<AlertDialog open={stopDialogOpen} onOpenChange={setStopDialogOpen}>
+			{/* Stop Transcription / Remove From Queue Dialog */}
+			<AlertDialog
+				open={stopDialogOpen}
+				onOpenChange={(open) => {
+					setStopDialogOpen(open);
+					setStopError(null);
+				}}
+			>
 				<AlertDialogContent className="glass-card bg-[var(--bg-main)]/90 border-[var(--border-subtle)]">
 					<AlertDialogHeader>
 						<AlertDialogTitle className="text-[var(--text-primary)]">
-							Stop Transcription?
+							{selectedFile?.status === "pending" ? "Remove from Queue?" : "Stop Transcription?"}
 						</AlertDialogTitle>
 						<AlertDialogDescription className="text-[var(--text-secondary)]">
-							Are you sure you want to stop the transcription process
-							for "{selectedFile?.title || (selectedFile ? getFileName(selectedFile.audio_path) : "")}"?
-							Partially transcribed data may be saved.
+							{selectedFile?.status === "pending" ? (
+								<>
+									The transcription for "
+									{selectedFile?.title || (selectedFile ? getFileName(selectedFile.audio_path) : "")}
+									" has not started yet. It will be removed from the queue.
+								</>
+							) : (
+								<>
+									Are you sure you want to stop the transcription process
+									for "{selectedFile?.title || (selectedFile ? getFileName(selectedFile.audio_path) : "")}"?
+									Partially transcribed data may be saved.
+								</>
+							)}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
+					{stopError && (
+						<p className="text-sm text-[var(--error)]">{stopError}</p>
+					)}
 					<AlertDialogFooter>
 						<AlertDialogCancel className="bg-[var(--secondary)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-card)]">
 							Cancel
@@ -1058,8 +1088,10 @@ export const AudioFilesTable = memo(function AudioFilesTable({
 							{killingJobs.has(selectedFile?.id || "") ? (
 								<>
 									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-									Stopping...
+									{selectedFile?.status === "pending" ? "Removing..." : "Stopping..."}
 								</>
+							) : selectedFile?.status === "pending" ? (
+								"Remove from Queue"
 							) : (
 								"Stop Transcription"
 							)}

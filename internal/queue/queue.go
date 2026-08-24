@@ -187,6 +187,18 @@ func (tq *TaskQueue) worker(id int) {
 
 			logger.WorkerOperation(id, jobID, "start")
 
+			// Re-read the job before claiming it: it may have been cancelled
+			// or deleted while it was waiting in the channel.
+			currentJob, err := tq.jobRepo.FindByID(context.Background(), jobID)
+			if err != nil {
+				logger.Info("Skipping dequeued job", "job_id", jobID, "reason", "job not found")
+				continue
+			}
+			if currentJob.Status != models.StatusPending {
+				logger.Info("Skipping dequeued job", "job_id", jobID, "reason", "status is no longer pending", "status", currentJob.Status)
+				continue
+			}
+
 			// Update job status to processing
 			if err := tq.updateJobStatus(jobID, models.StatusProcessing); err != nil {
 				logger.Error("Failed to update job status", "worker_id", id, "job_id", jobID, "error", err)
@@ -214,7 +226,7 @@ func (tq *TaskQueue) worker(id int) {
 			}
 
 			// Process the job with process registration
-			err := tq.processor.ProcessJobWithProcess(jobCtx, jobID, registerProcess)
+			err = tq.processor.ProcessJobWithProcess(jobCtx, jobID, registerProcess)
 
 			// Remove job from running jobs
 			tq.jobsMutex.Lock()
@@ -277,6 +289,17 @@ func (tq *TaskQueue) KillJob(jobID string) error {
 			}
 			if err := tq.updateJobError(jobID, "Job was forcefully terminated by user (zombie process)"); err != nil {
 				logger.Error("Failed to update zombie job error", "job_id", jobID, "error", err)
+			}
+			return nil
+		}
+
+		if job.Status == models.StatusPending {
+			logger.Info("Cancelling job still waiting in queue", "job_id", jobID)
+			if err := tq.updateJobStatus(jobID, models.StatusFailed); err != nil {
+				logger.Error("Failed to update queued job status", "job_id", jobID, "error", err)
+			}
+			if err := tq.updateJobError(jobID, "Job was cancelled while queued"); err != nil {
+				logger.Error("Failed to update queued job error", "job_id", jobID, "error", err)
 			}
 			return nil
 		}

@@ -690,6 +690,24 @@ func (suite *APIHandlerTestSuite) TestLogout() {
 	assert.Equal(suite.T(), 200, w.Code)
 }
 
+// The kill endpoint accepts a pending job that is still waiting in the
+// queue: it returns 200 and the job ends up failed with a queued-cancellation
+// message, so it becomes deletable without ever being processed.
+func (suite *APIHandlerTestSuite) TestKillEndpointCancelsPendingJob() {
+	job := suite.helper.CreateTestTranscriptionJob(suite.T(), "Pending job cancelled from queue")
+
+	w := suite.makeAuthenticatedRequest("POST", "/api/v1/transcription/"+job.ID+"/kill", nil, false)
+	assert.Equal(suite.T(), 200, w.Code, "cancelling a pending job should succeed, got body: %s", w.Body.String())
+
+	var updated models.TranscriptionJob
+	err := suite.helper.DB.First(&updated, "id = ?", job.ID).Error
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), models.StatusFailed, updated.Status)
+	if assert.NotNil(suite.T(), updated.ErrorMessage) {
+		assert.Contains(suite.T(), strings.ToLower(*updated.ErrorMessage), "queued")
+	}
+}
+
 func TestAPIHandlerTestSuite(t *testing.T) {
 	suite.Run(t, new(APIHandlerTestSuite))
 }
