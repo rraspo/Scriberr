@@ -49,6 +49,7 @@ type Handler struct {
 	speakerMappingRepo        repository.SpeakerMappingRepository
 	speakerProfileRepo        repository.SpeakerProfileRepository
 	speakerEmbeddingExtractor SpeakerEmbeddingExtractor
+	jobReconciler             *transcription.JobReconciler
 	refreshTokenRepo          repository.RefreshTokenRepository
 	taskQueue                 *queue.TaskQueue
 	unifiedProcessor          *transcription.UnifiedJobProcessor

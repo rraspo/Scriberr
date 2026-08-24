@@ -2056,6 +2056,61 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/speakers/reconcile/jobs/{job_id}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Re-runs speaker identification for a single completed transcription job against the currently enrolled speaker profiles. Never blocks, fails, or re-queues the job: a job whose audio file no longer exists is reported as a skip, not an error.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "speakers"
+                ],
+                "summary": "Reconcile one completed job against enrolled speaker profiles",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Transcription Job ID",
+                        "name": "job_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ReconcileJobResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/summaries": {
             "get": {
                 "security": [
@@ -3324,14 +3379,14 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Cancel a currently running transcription job",
+                "description": "Cancel a currently running transcription job, or remove a still-pending job from the queue",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "transcription"
                 ],
-                "summary": "Kill running transcription job",
+                "summary": "Kill running or queued transcription job",
                 "parameters": [
                     {
                         "type": "string",
@@ -4725,6 +4780,23 @@ const docTemplate = `{
                 "content": {
                     "type": "string",
                     "minLength": 1
+                }
+            }
+        },
+        "api.ReconcileJobResponse": {
+            "type": "object",
+            "properties": {
+                "mappings_written": {
+                    "type": "integer"
+                },
+                "matched": {
+                    "type": "boolean"
+                },
+                "skip_reason": {
+                    "type": "string"
+                },
+                "skipped": {
+                    "type": "boolean"
                 }
             }
         },

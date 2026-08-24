@@ -283,6 +283,17 @@ definitions:
     required:
     - content
     type: object
+  api.ReconcileJobResponse:
+    properties:
+      mappings_written:
+        type: integer
+      matched:
+        type: boolean
+      skip_reason:
+        type: string
+      skipped:
+        type: boolean
+    type: object
   api.RefreshTokenResponse:
     properties:
       token:
@@ -2199,6 +2210,43 @@ paths:
       summary: Delete a speaker profile sample
       tags:
       - speakers
+  /api/v1/speakers/reconcile/jobs/{job_id}:
+    post:
+      description: 'Re-runs speaker identification for a single completed transcription
+        job against the currently enrolled speaker profiles. Never blocks, fails,
+        or re-queues the job: a job whose audio file no longer exists is reported
+        as a skip, not an error.'
+      parameters:
+      - description: Transcription Job ID
+        in: path
+        name: job_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReconcileJobResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Reconcile one completed job against enrolled speaker profiles
+      tags:
+      - speakers
   /api/v1/summaries:
     get:
       description: Get all summarization templates
@@ -2580,7 +2628,8 @@ paths:
       - transcription
   /api/v1/transcription/{id}/kill:
     post:
-      description: Cancel a currently running transcription job
+      description: Cancel a currently running transcription job, or remove a still-pending
+        job from the queue
       parameters:
       - description: Job ID
         in: path
@@ -2611,7 +2660,7 @@ paths:
       security:
       - ApiKeyAuth: []
       - BearerAuth: []
-      summary: Kill running transcription job
+      summary: Kill running or queued transcription job
       tags:
       - transcription
   /api/v1/transcription/{id}/merge-status:

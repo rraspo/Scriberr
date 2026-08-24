@@ -124,9 +124,12 @@ func main() {
 	// One extractor instance serves both enrollment and identification: it
 	// holds no per-request state, only the path of its Python environment.
 	speakerEmbeddingExtractor := adapters.NewSpeakerEmbeddingAdapter(filepath.Join(cfg.WhisperXEnv, "speaker"))
-	unifiedProcessor.GetUnifiedService().SetSpeakerIdentifier(
-		transcription.NewDefaultSpeakerIdentifier(database.DB, speakerEmbeddingExtractor),
-	)
+	// The same identifier instance backs both post-transcription matching and
+	// on-demand single-job reconciliation, so the two triggers share one set
+	// of matching bounds.
+	speakerIdentifier := transcription.NewDefaultSpeakerIdentifier(database.DB, speakerEmbeddingExtractor)
+	unifiedProcessor.GetUnifiedService().SetSpeakerIdentifier(speakerIdentifier)
+	jobReconciler := transcription.NewJobReconciler(database.DB, speakerIdentifier)
 
 	// Bootstrap embedded Python environment (for all adapters)
 	logger.Startup("python", "Preparing Python environment")
@@ -176,6 +179,7 @@ func main() {
 	)
 	handler.SetSpeakerProfileRepo(speakerProfileRepo)
 	handler.SetSpeakerEmbeddingExtractor(speakerEmbeddingExtractor)
+	handler.SetJobReconciler(jobReconciler)
 
 	// Set up router
 	router := api.SetupRoutes(handler, authService)
