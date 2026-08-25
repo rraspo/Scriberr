@@ -708,6 +708,21 @@ func (suite *APIHandlerTestSuite) TestKillEndpointCancelsPendingJob() {
 	}
 }
 
+// The batch reconcile endpoint rejects a limit above the documented cap of
+// 100 with 400 before any processing starts: no speaker mappings are written.
+func (suite *APIHandlerTestSuite) TestBatchReconcileRejectsOversizedLimit() {
+	suite.helper.CreateTestTranscriptionJob(suite.T(), "Completed job that must stay untouched")
+
+	body := map[string]int{"limit": 101}
+	w := suite.makeAuthenticatedRequest("POST", "/api/v1/speakers/reconcile/batch", body, false)
+	assert.Equal(suite.T(), 400, w.Code, "limit above the cap must be rejected, got body: %s", w.Body.String())
+
+	var mappingCount int64
+	err := suite.helper.DB.Model(&models.SpeakerMapping{}).Count(&mappingCount).Error
+	assert.NoError(suite.T(), err)
+	assert.Zero(suite.T(), mappingCount, "an oversized batch request must process nothing")
+}
+
 func TestAPIHandlerTestSuite(t *testing.T) {
 	suite.Run(t, new(APIHandlerTestSuite))
 }

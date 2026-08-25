@@ -199,6 +199,7 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 			speakers.POST("/profiles/:id/samples", handler.EnrollSpeakerProfileSample)
 			speakers.DELETE("/profiles/:id/samples/:sample_id", handler.DeleteSpeakerProfileSample)
 			speakers.POST("/reconcile/jobs/:job_id", handler.ReconcileJobSpeakers)
+			speakers.POST("/reconcile/batch", handler.ReconcileBatchSpeakers)
 		}
 
 		// User routes (require authentication)

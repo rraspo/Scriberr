@@ -2050,6 +2050,65 @@
                 }
             }
         },
+        "/api/v1/speakers/reconcile/batch": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Selects up to limit completed, diarized jobs, oldest first, and reconciles them one at a time against the currently enrolled speaker profiles. A job whose audio file no longer exists is skipped, not treated as an error, and the rest of the batch still runs. limit defaults to 20 and is capped at 100; a request above the cap is rejected before any processing starts.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "speakers"
+                ],
+                "summary": "Reconcile a bounded batch of completed jobs against enrolled speaker profiles",
+                "parameters": [
+                    {
+                        "description": "Batch reconciliation options",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.ReconcileBatchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ReconcileBatchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/speakers/reconcile/jobs/{job_id}": {
             "post": {
                 "security": [
@@ -4774,6 +4833,40 @@
                 "content": {
                     "type": "string",
                     "minLength": 1
+                }
+            }
+        },
+        "api.ReconcileBatchRequest": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.ReconcileBatchResponse": {
+            "type": "object",
+            "properties": {
+                "jobs_considered": {
+                    "type": "integer"
+                },
+                "jobs_matched": {
+                    "type": "integer"
+                },
+                "mappings_written": {
+                    "type": "integer"
+                },
+                "processed_job_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "skipped_missing_audio": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

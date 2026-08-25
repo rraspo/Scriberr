@@ -101,3 +101,58 @@ func (reconciler *JobReconciler) countMappings(ctx context.Context, jobID string
 	}
 	return int(count), nil
 }
+
+// BatchReconcileResult reports the outcome of one bounded ReconcileBatch run.
+// Like ReconcileResult, it carries counts and job identifiers only, never
+// embedding data or the identity of a candidate that did not match.
+type BatchReconcileResult struct {
+	JobsConsidered      int
+	ProcessedJobIDs     []string
+	JobsMatched         int
+	SkippedMissingAudio []string
+	MappingsWritten     int
+}
+
+// ReconcileBatch selects up to limit completed, diarized jobs, oldest first,
+// and calls ReconcileJob on each strictly sequentially: one job at a time,
+// no goroutines. This is the queue-stampede guard for the CPU-bound
+// embedding extractor, which is also shared with live transcription jobs; a
+// caller wanting an entire library reconciled makes repeated bounded calls
+// rather than triggering one unbounded or concurrent sweep.
+func (reconciler *JobReconciler) ReconcileBatch(ctx context.Context, limit int) (BatchReconcileResult, error) {
+	var candidateJobIDs []string
+	if err := reconciler.db.WithContext(ctx).
+		Model(&models.TranscriptionJob{}).
+		Where("status = ? AND diarization = ?", models.StatusCompleted, true).
+		Order("created_at ASC").
+		Limit(limit).
+		Pluck("id", &candidateJobIDs).Error; err != nil {
+		return BatchReconcileResult{}, fmt.Errorf("failed to select batch reconciliation candidates: %w", err)
+	}
+
+	result := BatchReconcileResult{JobsConsidered: len(candidateJobIDs)}
+	for _, jobID := range candidateJobIDs {
+		jobResult, err := reconciler.ReconcileJob(ctx, jobID)
+		if err != nil {
+			return BatchReconcileResult{}, err
+		}
+
+		result.ProcessedJobIDs = append(result.ProcessedJobIDs, jobID)
+		if jobResult.Skipped {
+			result.SkippedMissingAudio = append(result.SkippedMissingAudio, jobID)
+			continue
+		}
+		if jobResult.Matched {
+			result.JobsMatched++
+		}
+		result.MappingsWritten += jobResult.MappingsWritten
+	}
+
+	logger.Info("Speaker batch reconciliation completed",
+		"jobs_considered", result.JobsConsidered,
+		"jobs_processed", len(result.ProcessedJobIDs),
+		"jobs_skipped_missing_audio", len(result.SkippedMissingAudio),
+		"mappings_written", result.MappingsWritten,
+	)
+	return result, nil
+}

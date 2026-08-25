@@ -283,6 +283,28 @@ definitions:
     required:
     - content
     type: object
+  api.ReconcileBatchRequest:
+    properties:
+      limit:
+        type: integer
+    type: object
+  api.ReconcileBatchResponse:
+    properties:
+      jobs_considered:
+        type: integer
+      jobs_matched:
+        type: integer
+      mappings_written:
+        type: integer
+      processed_job_ids:
+        items:
+          type: string
+        type: array
+      skipped_missing_audio:
+        items:
+          type: string
+        type: array
+    type: object
   api.ReconcileJobResponse:
     properties:
       mappings_written:
@@ -2208,6 +2230,47 @@ paths:
       - BearerAuth: []
       - ApiKeyAuth: []
       summary: Delete a speaker profile sample
+      tags:
+      - speakers
+  /api/v1/speakers/reconcile/batch:
+    post:
+      consumes:
+      - application/json
+      description: Selects up to limit completed, diarized jobs, oldest first, and
+        reconciles them one at a time against the currently enrolled speaker profiles.
+        A job whose audio file no longer exists is skipped, not treated as an error,
+        and the rest of the batch still runs. limit defaults to 20 and is capped at
+        100; a request above the cap is rejected before any processing starts.
+      parameters:
+      - description: Batch reconciliation options
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/api.ReconcileBatchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReconcileBatchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Reconcile a bounded batch of completed jobs against enrolled speaker
+        profiles
       tags:
       - speakers
   /api/v1/speakers/reconcile/jobs/{job_id}:
