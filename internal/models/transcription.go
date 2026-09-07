@@ -19,6 +19,7 @@ type TranscriptionJob struct {
 	ErrorMessage          *string        `json:"error_message,omitempty" gorm:"type:text"`
 	ExecutionPath         string         `json:"execution_path" gorm:"type:text;not null;default:'local'"`
 	ExecutionReason       string         `json:"execution_reason" gorm:"type:text"`
+	Source                string         `json:"source" gorm:"type:varchar(20);not null;default:'manual'"` // e.g., "manual", "omi"
 	IsMultiTrack          bool           `json:"is_multi_track" gorm:"type:boolean;default:false"`
 	AupFilePath           *string        `json:"aup_file_path,omitempty" gorm:"type:text"`
 	MultiTrackFolder      *string        `json:"multi_track_folder,omitempty" gorm:"type:text"`

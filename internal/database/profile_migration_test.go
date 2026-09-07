@@ -105,3 +105,15 @@ func TestTranscriptionJobMigrationAddsExecutionPathFields(t *testing.T) {
 	require.Equal(t, "local", job.ExecutionPath)
 	require.Empty(t, job.ExecutionReason)
 }
+
+func TestTranscriptionJobMigrationDefaultsSourceToManual(t *testing.T) {
+	db := openMigrationTestDB(t)
+	require.NoError(t, db.AutoMigrate(&legacyTranscriptionJob{}))
+	require.NoError(t, db.Create(&legacyTranscriptionJob{ID: "pre-existing-job", AudioPath: "audio.wav"}).Error)
+
+	require.NoError(t, db.AutoMigrate(&models.TranscriptionJob{}))
+
+	var job models.TranscriptionJob
+	require.NoError(t, db.First(&job, "id = ?", "pre-existing-job").Error)
+	require.Equal(t, "manual", job.Source)
+}

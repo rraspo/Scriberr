@@ -400,6 +400,101 @@ func (suite *APIHandlerTestSuite) TestListTranscriptionJobsDeltaSync() {
 	}
 }
 
+// Test that the list endpoint's source filter separates ingest streams (e.g. omi)
+// from manually uploaded jobs, and that omitting the filter still returns everything.
+func (suite *APIHandlerTestSuite) TestListTranscriptionJobsFiltersBySource() {
+	manualJob := suite.helper.CreateTestTranscriptionJob(suite.T(), "Manual Job")
+
+	omiJob := &models.TranscriptionJob{
+		Title:     stringPtr("Omi Job"),
+		Status:    models.StatusPending,
+		AudioPath: "test/path/omi-audio.mp3",
+		Source:    "omi",
+	}
+	assert.NoError(suite.T(), suite.helper.DB.Create(omiJob).Error)
+
+	jobIDsForQuery := func(query string) []string {
+		w := suite.makeAuthenticatedRequest("GET", "/api/v1/transcription/list"+query, nil, false)
+		assert.Equal(suite.T(), 200, w.Code)
+
+		var response map[string]interface{}
+		assert.NoError(suite.T(), json.Unmarshal(w.Body.Bytes(), &response))
+
+		jobs := response["jobs"].([]interface{})
+		ids := make([]string, 0, len(jobs))
+		for _, job := range jobs {
+			ids = append(ids, job.(map[string]interface{})["id"].(string))
+		}
+		return ids
+	}
+
+	assert.ElementsMatch(suite.T(), []string{omiJob.ID}, jobIDsForQuery("?source=omi"))
+	assert.ElementsMatch(suite.T(), []string{manualJob.ID}, jobIDsForQuery("?source=manual"))
+	assert.ElementsMatch(suite.T(), []string{manualJob.ID, omiJob.ID}, jobIDsForQuery(""))
+}
+
+// Test that filtering by a source nobody has ever written returns an empty list
+// rather than an error, since a caller may query a stream that hasn't shipped yet.
+func (suite *APIHandlerTestSuite) TestListTranscriptionJobsUnknownSourceReturnsEmptyList() {
+	suite.helper.CreateTestTranscriptionJob(suite.T(), "Manual Job")
+
+	w := suite.makeAuthenticatedRequest("GET", "/api/v1/transcription/list?source=nonexistent", nil, false)
+	assert.Equal(suite.T(), 200, w.Code)
+
+	var response map[string]interface{}
+	assert.NoError(suite.T(), json.Unmarshal(w.Body.Bytes(), &response))
+
+	jobs := response["jobs"].([]interface{})
+	assert.Empty(suite.T(), jobs)
+}
+
+// Test that the upload endpoint (used by ingest producers like the CLI watcher
+// and, in future, the omi-bridge relay) defaults to 'manual' when no source is
+// given and stores an explicit source when one is.
+func (suite *APIHandlerTestSuite) TestUploadAudioAcceptsOptionalSource() {
+	uploadWithSource := func(source string) *models.TranscriptionJob {
+		tmpFile, err := os.CreateTemp("", "test_audio_*.mp3")
+		assert.NoError(suite.T(), err)
+		defer os.Remove(tmpFile.Name())
+		tmpFile.WriteString("dummy audio data for source upload testing")
+		tmpFile.Close()
+
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+
+		file, err := os.Open(tmpFile.Name())
+		assert.NoError(suite.T(), err)
+		defer file.Close()
+
+		part, err := writer.CreateFormFile("audio", "test.mp3")
+		assert.NoError(suite.T(), err)
+		io.Copy(part, file)
+
+		if source != "" {
+			writer.WriteField("source", source)
+		}
+		writer.Close()
+
+		req, _ := http.NewRequest("POST", "/api/v1/transcription/upload", body)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		req.Header.Set("X-API-Key", suite.helper.TestAPIKey)
+
+		w := httptest.NewRecorder()
+		suite.router.ServeHTTP(w, req)
+		assert.Equal(suite.T(), 200, w.Code)
+
+		var response models.TranscriptionJob
+		assert.NoError(suite.T(), json.Unmarshal(w.Body.Bytes(), &response))
+		return &response
+	}
+
+	withoutSource := uploadWithSource("")
+	assert.Equal(suite.T(), "manual", withoutSource.Source)
+
+	withOmiSource := uploadWithSource("omi")
+	assert.Equal(suite.T(), "omi", withOmiSource.Source)
+}
+
 // Test getting transcription job by ID
 func (suite *APIHandlerTestSuite) TestGetTranscriptionJobByID() {
 	testJob := suite.helper.CreateTestTranscriptionJob(suite.T(), "Test Job by ID")

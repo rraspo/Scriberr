@@ -53,7 +53,7 @@ type JobRepository interface {
 	FindWithAssociations(ctx context.Context, id string) (*models.TranscriptionJob, error)
 	FindActiveTrackJobs(ctx context.Context, parentJobID string) ([]models.TranscriptionJob, error)
 	FindLatestCompletedExecution(ctx context.Context, jobID string) (*models.TranscriptionJobExecution, error)
-	ListWithParams(ctx context.Context, offset, limit int, sortBy, sortOrder, searchQuery string, updatedAfter *time.Time) ([]models.TranscriptionJob, int64, error)
+	ListWithParams(ctx context.Context, offset, limit int, sortBy, sortOrder, searchQuery, sourceFilter string, updatedAfter *time.Time) ([]models.TranscriptionJob, int64, error)
 	ListByUser(ctx context.Context, userID uint, offset, limit int) ([]models.TranscriptionJob, int64, error)
 	UpdateTranscript(ctx context.Context, jobID string, transcript string) error
 	CreateExecution(ctx context.Context, execution *models.TranscriptionJobExecution) error
@@ -90,7 +90,7 @@ func (r *jobRepository) FindWithAssociations(ctx context.Context, id string) (*m
 	return &job, nil
 }
 
-func (r *jobRepository) ListWithParams(ctx context.Context, offset, limit int, sortBy, sortOrder, searchQuery string, updatedAfter *time.Time) ([]models.TranscriptionJob, int64, error) {
+func (r *jobRepository) ListWithParams(ctx context.Context, offset, limit int, sortBy, sortOrder, searchQuery, sourceFilter string, updatedAfter *time.Time) ([]models.TranscriptionJob, int64, error) {
 	var jobs []models.TranscriptionJob
 	var count int64
 
@@ -105,6 +105,11 @@ func (r *jobRepository) ListWithParams(ctx context.Context, offset, limit int, s
 	if searchQuery != "" {
 		search := "%" + searchQuery + "%"
 		db = db.Where("title LIKE ? OR audio_path LIKE ?", search, search)
+	}
+
+	// Apply source filter
+	if sourceFilter != "" {
+		db = db.Where("source = ?", sourceFilter)
 	}
 
 	// Count total matching records

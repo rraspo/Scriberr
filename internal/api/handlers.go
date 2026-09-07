@@ -259,6 +259,7 @@ func transformAPIKeyForList(apiKey models.APIKey) APIKeyListResponse {
 // @Produce json
 // @Param audio formData file true "Audio file"
 // @Param title formData string false "Job title"
+// @Param source formData string false "Recording source, e.g. manual or omi" default(manual)
 // @Success 200 {object} models.TranscriptionJob
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -323,6 +324,11 @@ func (h *Handler) UploadAudio(c *gin.Context) {
 
 	if title := c.PostForm(paramTitle); title != "" {
 		job.Title = &title
+	}
+
+	// Leave Source unset when absent so the database default ('manual') applies.
+	if source := c.PostForm(paramSource); source != "" {
+		job.Source = source
 	}
 
 	// Save to database using Repository
@@ -914,6 +920,7 @@ func (h *Handler) GetTranscript(c *gin.Context) {
 // @Param sort_order query string false "Sort Order (asc/desc)"
 // @Param status query string false "Filter by status"
 // @Param q query string false "Search in title and audio filename"
+// @Param source query string false "Filter by source (e.g. manual, omi)"
 // @Param updated_after query string false "Filter by updated_at > timestamp (RFC3339)"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]string
@@ -928,6 +935,7 @@ func (h *Handler) ListTranscriptionJobs(c *gin.Context) {
 	sortBy := c.Query("sort_by")
 	sortOrder := c.Query("sort_order")
 	searchQuery := c.Query("q")
+	sourceFilter := c.Query(paramSource)
 	updatedAfterStr := c.Query("updated_after")
 
 	var updatedAfter *time.Time
@@ -937,7 +945,7 @@ func (h *Handler) ListTranscriptionJobs(c *gin.Context) {
 		}
 	}
 
-	jobs, total, err := h.jobRepo.ListWithParams(c.Request.Context(), offset, limit, sortBy, sortOrder, searchQuery, updatedAfter)
+	jobs, total, err := h.jobRepo.ListWithParams(c.Request.Context(), offset, limit, sortBy, sortOrder, searchQuery, sourceFilter, updatedAfter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list jobs"})
 		return
