@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Moon, Power } from "lucide-react";
+import { ChevronDown, Loader2, Moon, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -127,27 +133,41 @@ export function RemotePowerButtons({ reachable, onFinished }: RemotePowerButtons
 
 	return (
 		<div className="flex items-center gap-2">
-			{reachable ? (
-				<Button
-					variant="outline"
-					size="sm"
-					disabled={busy}
-					onClick={() => setConfirmSleepOpen(true)}
-				>
-					{runningAction === "sleep" ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <Moon />}
-					{runningAction === "sleep" ? RUNNING_LABEL.sleep : "Sleep GPU host"}
-				</Button>
-			) : (
-				<Button variant="outline" size="sm" disabled={busy} onClick={() => runAction("wake")}>
-					{runningAction === "wake" ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <Power />}
-					{runningAction === "wake" ? RUNNING_LABEL.wake : "Wake GPU host"}
-				</Button>
-			)}
 			{errorMessage && (
 				<span role="alert" className="text-sm text-red-500">
 					{errorMessage}
 				</span>
 			)}
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button variant="outline" size="sm" disabled={busy} className="rounded-full">
+						{busy ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <Power />}
+						{runningAction ? RUNNING_LABEL[runningAction] : "GPU host"}
+						{!busy && <ChevronDown className="opacity-60" />}
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent
+					align="end"
+					className="w-48 glass-card border-[var(--border-subtle)] p-2 rounded-[var(--radius-card)] shadow-[var(--shadow-float)]"
+				>
+					<DropdownMenuItem
+						disabled={reachable}
+						onClick={() => runAction("wake")}
+						className="cursor-pointer rounded-[var(--radius-btn)] focus:bg-[var(--secondary)] py-2.5"
+					>
+						<Power />
+						Wake GPU host
+					</DropdownMenuItem>
+					<DropdownMenuItem
+						disabled={!reachable}
+						onClick={() => setConfirmSleepOpen(true)}
+						className="cursor-pointer rounded-[var(--radius-btn)] focus:bg-[var(--secondary)] py-2.5"
+					>
+						<Moon />
+						Sleep GPU host
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
 
 			<AlertDialog open={confirmSleepOpen} onOpenChange={setConfirmSleepOpen}>
 				<AlertDialogContent>
