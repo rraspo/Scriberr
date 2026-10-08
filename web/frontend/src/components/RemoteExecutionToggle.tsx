@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
+import { RemotePowerButtons } from "@/components/RemotePowerButtons";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import {
@@ -33,6 +34,7 @@ export function RemoteExecutionToggle() {
 				hasRemote: Boolean(data.has_remote),
 				reachable: Boolean(data.reachable),
 				hosts: Array.isArray(data.hosts) ? data.hosts : [],
+				powerAvailable: Boolean(data.power_available),
 			});
 		} catch (error) {
 			console.error("Failed to fetch remote execution health:", error);
@@ -86,7 +88,7 @@ export function RemoteExecutionToggle() {
 
 	const reachable = health.reachable;
 
-	return (
+	const pill = (
 		<Tooltip>
 			<TooltipTrigger asChild>
 				<div
@@ -121,5 +123,16 @@ export function RemoteExecutionToggle() {
 					: "GPU host unreachable — jobs will run locally"}
 			</TooltipContent>
 		</Tooltip>
+	);
+
+	if (!health.powerAvailable) {
+		return pill;
+	}
+
+	return (
+		<div className="flex flex-wrap items-center justify-end gap-2">
+			{pill}
+			<RemotePowerButtons reachable={reachable} onFinished={fetchHealth} />
+		</div>
 	);
 }

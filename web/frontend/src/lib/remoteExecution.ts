@@ -11,6 +11,7 @@ export interface RemoteExecutionHealth {
 	hasRemote: boolean;
 	reachable: boolean;
 	hosts: RemoteExecutionHost[];
+	powerAvailable: boolean;
 }
 
 interface RemoteExecutionState {
