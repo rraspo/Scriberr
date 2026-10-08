@@ -44,6 +44,8 @@ type RemoteExecutionHealthResponse struct {
 	HasRemote bool               `json:"has_remote"`
 	Reachable bool               `json:"reachable"`
 	Hosts     []RemoteHostHealth `json:"hosts"`
+	// PowerAvailable is true when wake and sleep runbooks are configured.
+	PowerAvailable bool `json:"power_available"`
 }
 
 // @Summary Remote execution health
@@ -59,6 +61,7 @@ func (h *Handler) RemoteExecutionHealth(c *gin.Context) {
 	if !h.remoteHealthCache.fetchedAt.IsZero() && time.Since(h.remoteHealthCache.fetchedAt) < remoteHealthCacheTTL {
 		cached := h.remoteHealthCache.response
 		h.remoteHealthCache.Unlock()
+		cached.PowerAvailable = h.powerAvailable()
 		c.JSON(http.StatusOK, cached)
 		return
 	}
@@ -92,7 +95,7 @@ func (h *Handler) RemoteExecutionHealth(c *gin.Context) {
 		endpoints[key] = endpoint{host: profile.RemoteHost, port: port, timeout: timeout}
 	}
 
-	response := RemoteExecutionHealthResponse{Hosts: []RemoteHostHealth{}}
+	response := RemoteExecutionHealthResponse{Hosts: []RemoteHostHealth{}, PowerAvailable: h.powerAvailable()}
 	if len(endpoints) == 0 {
 		c.JSON(http.StatusOK, response)
 		return

@@ -42,6 +42,12 @@ type Config struct {
 
 	// Hugging Face configuration
 	HFToken string
+
+	// Remote GPU host power control, delegated to Mission Control runbooks.
+	// Empty values leave the feature off.
+	MissionControlURL string
+	PowerWakeRunbook  string
+	PowerSleepRunbook string
 }
 
 // Load loads configuration from environment variables and .env file
@@ -72,6 +78,10 @@ func Load() *Config {
 		SecureCookies:  getEnv("SECURE_COOKIES", defaultSecure) == "true",
 		OpenAIAPIKey:   getEnv("OPENAI_API_KEY", ""),
 		HFToken:        getEnv("HF_TOKEN", ""),
+
+		MissionControlURL: strings.TrimRight(getEnv("MISSION_CONTROL_URL", ""), "/"),
+		PowerWakeRunbook:  getEnv("POWER_WAKE_RUNBOOK", ""),
+		PowerSleepRunbook: getEnv("POWER_SLEEP_RUNBOOK", ""),
 	}
 }
 
