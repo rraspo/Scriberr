@@ -55,6 +55,31 @@ docker build -f Dockerfile .
 
 Do not substitute a local Docker build when the Docker socket is unavailable.
 
+## Deploy
+
+- **Targets:** one container on the owner's local fleet, the owner's own transcription tool,
+  running a locally built `scriberr-fork:<branch>-<short-sha>` image from a compose stack. It
+  holds the owner's real transcripts and profiles. No public or hosted target; the repo
+  publishes no image or release.
+- **When:** shipping is part of finishing. A change is done when it runs in the local
+  container, so a session builds and recreates in the same turn it verifies the change,
+  without asking. Build from the branch the live image runs plus the change, so nothing
+  already live drops out.
+- **Path:** local fleet, direct (no Mission Control runbook): build the image with an explicit
+  traceable tag, back up the DB, edit only the `image:` lines of the stack's compose file,
+  recreate. The folder-watcher sidecar is pinned to the identical tag so fork and watcher
+  never skew.
+- **Hard rules:** never tag or run `latest` (a rollback must name exactly what was running).
+  Before every recreate, copy the sqlite DB with its `-wal` and `-shm` siblings into the
+  stack's `backups/` folder (the bare `.db` is stale in WAL mode). The compose edit preserves
+  `QUEUE_WORKERS=1`, the memory/cpu limits and all data/env/cache mounts. Secrets (HF token env
+  file, remote SSH service key mounted read-only) stay out of the image and every tracked file;
+  never read or print them. Rollback is restoring the previous `image:` tag and recreating.
+- **Owner go required for:** credential or secret changes, and any DB change beyond an
+  additive migration (dropping or rewriting columns, tables or rows).
+- **Verify:** `docker inspect` shows the new tag on both containers; the root answers 200;
+  `docker exec` of `env | grep QUEUE_WORKERS` prints `1`; the backup path is reported.
+
 ## Product language
 
 User-interface copy stays in English to match upstream and keep changes
