@@ -23,8 +23,12 @@ repository.
 
 The default branch is `master` (owner decision 2026-08-04, overriding the
 fork-keeps-upstream-default convention for this repo). Upstream tracking is
-unaffected: rebase feature branches against `upstream/main`. Feature work
-belongs on feature branches.
+unaffected: pull upstream changes by rebasing or merging `upstream/main`.
+
+`master` is exactly what the live container runs. Work commits straight to
+`master` and the live image is always built from `master`; a branch or
+worktree exists only for the length of a parallel task and is merged and
+deleted before its change ships.
 
 ## Build baseline
 
@@ -63,8 +67,7 @@ Do not substitute a local Docker build when the Docker socket is unavailable.
   publishes no image or release.
 - **When:** shipping is part of finishing. A change is done when it runs in the local
   container, so a session builds and recreates in the same turn it verifies the change,
-  without asking. Build from the branch the live image runs plus the change, so nothing
-  already live drops out.
+  without asking. Build from `master`, tagged `scriberr-fork:master-<short-sha>`.
 - **Path:** local fleet, direct (no Mission Control runbook): build the image with an explicit
   traceable tag, back up the DB, edit only the `image:` lines of the stack's compose file,
   recreate. The folder-watcher sidecar is pinned to the identical tag so fork and watcher
