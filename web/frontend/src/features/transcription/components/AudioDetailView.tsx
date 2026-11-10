@@ -303,6 +303,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                         <div className="flex items-center gap-2">
                                             <SplitButton
                                                 onClick={() => handleCopy(copyTXT, 'Conversation copied to clipboard')}
+                                                primaryLabel="Copy conversation"
                                                 primaryDisabled={!transcript}
                                                 menuLabel="More copy options"
                                                 items={[
@@ -320,7 +321,9 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                     <Button
                                                         variant="outline"
                                                         size="icon"
-                                                        className="rounded-full border-[var(--border-subtle)] shadow-sm bg-[var(--bg-card)] hover:bg-[var(--bg-main)] transition-all"
+                                                        aria-label="More actions"
+                                                        title="More actions"
+                                                        className="rounded-full border-[var(--border-subtle)] shadow-sm bg-[var(--bg-card)] hover:bg-[var(--bg-main)] transition-all cursor-pointer select-none"
                                                     >
                                                         <MoreVertical className="h-4 w-4 text-[var(--text-secondary)]" />
                                                     </Button>

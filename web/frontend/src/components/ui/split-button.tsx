@@ -14,6 +14,8 @@ export interface SplitButtonItem {
 interface SplitButtonProps {
     /** The primary action's content: a label, with or without a leading icon. */
     children: ReactNode;
+    /** Names the primary action and is its tooltip, for widths where only its icon shows. */
+    primaryLabel: string;
     onClick: () => void;
     /** Accessible name of the chevron button and of the menu it opens. */
     menuLabel: string;
@@ -35,10 +37,10 @@ const PART =
  * one control with one height and one outline. The menu is aligned to the
  * control's trailing edge.
  */
-export function SplitButton({ children, onClick, menuLabel, items, primaryDisabled = false, className }: SplitButtonProps) {
+export function SplitButton({ children, primaryLabel, onClick, menuLabel, items, primaryDisabled = false, className }: SplitButtonProps) {
     return (
         <div className={cn("inline-flex items-stretch", className)}>
-            <button type="button" onClick={onClick} disabled={primaryDisabled} className={cn(PART, "gap-2 rounded-s-full px-3")}>
+            <button type="button" onClick={onClick} disabled={primaryDisabled} aria-label={primaryLabel} title={primaryLabel} className={cn(PART, "gap-2 rounded-s-full px-3")}>
                 {children}
             </button>
             <DropdownMenu>
