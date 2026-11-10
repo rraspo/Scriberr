@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
-import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, StickyNote, MessageCircle, FileImage, FileJson, Clock, AlertCircle, Users } from "lucide-react";
+import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, StickyNote, MessageCircle, FileImage, FileJson, Clock, AlertCircle, Users, Copy } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
 import { Header } from "@/components/Header";
 
 import { Button } from "@/components/ui/button";
@@ -65,7 +66,18 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
     const { data: speakerMappings = {} } = useSpeakerMappings(audioId || "", true);
 
     // Download Logic
-    const { downloadSRT } = useTranscriptDownload();
+    const { downloadSRT, copyTXT } = useTranscriptDownload();
+    const { toast } = useToast();
+
+    const handleCopyTranscript = async () => {
+        if (!transcript) return;
+        try {
+            await copyTXT(transcript, speakerMappings);
+            toast({ title: 'Conversation copied to clipboard' });
+        } catch {
+            toast({ title: 'Could not copy to clipboard', description: 'Your browser blocked clipboard access. Use Download Text instead.' });
+        }
+    };
 
     // State for Split View
     const [chatOpen, setChatOpen] = useState(false);
@@ -345,6 +357,9 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                         <Bot className="mr-2 h-4 w-4" /> AI Summary
                                                     </DropdownMenuItem>
                                                     <DropdownMenuSeparator className="bg-[var(--border-subtle)] my-1" />
+                                                    <DropdownMenuItem onClick={handleCopyTranscript} disabled={!transcript} className="rounded-[8px] cursor-pointer">
+                                                        <Copy className="mr-2 h-4 w-4 opacity-70" /> Copy to Clipboard
+                                                    </DropdownMenuItem>
                                                     <DropdownMenuItem onClick={() => transcript && downloadSRT(transcript, audioFile?.title || 'transcript', speakerMappings)} className="rounded-[8px] cursor-pointer">
                                                         <FileImage className="mr-2 h-4 w-4 opacity-70" /> Download SRT
                                                     </DropdownMenuItem>

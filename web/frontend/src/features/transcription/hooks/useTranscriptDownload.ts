@@ -59,14 +59,11 @@ export function useTranscriptDownload() {
         downloadFile(srtContent, `${filenameBase}.srt`, 'text/plain');
     };
 
-    const downloadTXT = (
+    const formatTXT = (
         transcript: Transcript,
-        filenameBase: string,
         speakerMappings: Record<string, string>,
         options: { includeTimestamps: boolean; includeSpeakerLabels: boolean }
-    ) => {
-        if (!transcript) return;
-
+    ): string => {
         let content = '';
 
         if (!options.includeSpeakerLabels && !options.includeTimestamps) {
@@ -89,8 +86,23 @@ export function useTranscriptDownload() {
             content = transcript.text;
         }
 
-        downloadFile(content, `${filenameBase}.txt`, 'text/plain');
+        return content;
     };
+
+    const downloadTXT = (
+        transcript: Transcript,
+        filenameBase: string,
+        speakerMappings: Record<string, string>,
+        options: { includeTimestamps: boolean; includeSpeakerLabels: boolean }
+    ) => {
+        if (!transcript) return;
+        downloadFile(formatTXT(transcript, speakerMappings, options), `${filenameBase}.txt`, 'text/plain');
+    };
+
+    const copyTXT = (transcript: Transcript, speakerMappings: Record<string, string>): Promise<void> =>
+        navigator.clipboard.writeText(
+            formatTXT(transcript, speakerMappings, { includeTimestamps: true, includeSpeakerLabels: true })
+        );
 
     const downloadJSON = (
         transcript: Transcript,
@@ -141,5 +153,5 @@ export function useTranscriptDownload() {
         downloadFile(JSON.stringify(jsonData, null, 2), `${filenameBase}.json`, 'application/json');
     };
 
-    return { downloadSRT, downloadTXT, downloadJSON };
+    return { downloadSRT, downloadTXT, downloadJSON, copyTXT };
 }
