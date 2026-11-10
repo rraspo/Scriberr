@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
-import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, MessageCircle, FileJson, Clock, AlertCircle, Users, Copy } from "lucide-react";
+import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, MessageCircle, FileJson, Clock, AlertCircle, Users, Copy, Hash, Link2 } from "lucide-react";
+import { SplitButton } from "@/components/ui/split-button";
 import { useToast } from "@/components/ui/toast";
 import { Header } from "@/components/Header";
 
@@ -84,7 +85,16 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
         }
     };
 
-    const hasSpeakers = transcript?.segments?.some((segment: TranscriptSegment) => segment.speaker) ?? false;
+    const copyText = async (text: string, successTitle: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            toast({ title: successTitle });
+        } catch {
+            toast({ title: 'Could not copy to clipboard', description: 'The browser blocked clipboard access. Allow it for this site and try again.' });
+        }
+    };
+
+    const hasSpeakers =transcript?.segments?.some((segment: TranscriptSegment) => segment.speaker) ?? false;
 
     // State for Split View
     const [chatOpen, setChatOpen] = useState(false);
@@ -291,19 +301,19 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                         {/* Action Menu */}
                                         {/* ... keeping existing Logic but updating Chat action ... */}
                                         <div className="flex items-center gap-2">
-                                            {/* Quick Chat Button */}
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setChatOpen(!chatOpen)}
-                                                className={cn(
-                                                    "rounded-full border-[var(--border-subtle)] shadow-sm bg-[var(--bg-card)] hover:bg-[var(--bg-main)] transition-all gap-2 px-3",
-                                                    chatOpen && "border-[var(--brand-solid)] text-[var(--brand-solid)]"
-                                                )}
+                                            <SplitButton
+                                                onClick={() => handleCopy(copyTXT, 'Conversation copied to clipboard')}
+                                                primaryDisabled={!transcript}
+                                                menuLabel="More copy options"
+                                                items={[
+                                                    { label: 'Copy Recording ID', icon: Hash, onSelect: () => copyText(audioFile.id, 'Recording ID copied') },
+                                                    { label: 'Copy Link', icon: Link2, onSelect: () => copyText(window.location.href, 'Link copied') },
+                                                    { label: 'Copy as JSON', icon: FileJson, onSelect: () => handleCopy(copyJSON, 'Conversation copied as JSON'), disabled: !transcript },
+                                                ]}
                                             >
-                                                <MessageCircle className="h-4 w-4" />
-                                                <span className="hidden sm:inline">Chat</span>
-                                            </Button>
+                                                <Copy className="h-4 w-4" />
+                                                <span className="hidden sm:inline">Copy</span>
+                                            </SplitButton>
 
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
@@ -340,13 +350,6 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem onClick={() => setSummaryDialogOpen(true)} className="rounded-[8px] cursor-pointer text-[var(--brand-solid)] focus:text-[var(--brand-solid)] focus:bg-[var(--brand-light)]">
                                                         <Bot className="mr-2 h-4 w-4" /> AI Summary
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuSeparator className="bg-[var(--border-subtle)] my-1" />
-                                                    <DropdownMenuItem onClick={() => handleCopy(copyTXT, 'Conversation copied to clipboard')} disabled={!transcript} className="rounded-[8px] cursor-pointer">
-                                                        <Copy className="mr-2 h-4 w-4 opacity-70" /> Copy to Clipboard
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleCopy(copyJSON, 'Conversation copied as JSON')} disabled={!transcript} className="rounded-[8px] cursor-pointer">
-                                                        <FileJson className="mr-2 h-4 w-4 opacity-70" /> Copy as JSON
                                                     </DropdownMenuItem>
                                                     <DropdownMenuSeparator className="bg-[var(--border-subtle)] my-1" />
                                                     <DropdownMenuItem onClick={() => setExecutionDialogOpen(true)} className="rounded-[8px] cursor-pointer">
