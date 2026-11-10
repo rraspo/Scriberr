@@ -2,7 +2,6 @@ import { forwardRef, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { useKaraokeHighlight, computeWordOffsets, findActiveWordIndex } from '@/features/transcription/hooks/useKaraokeHighlight';
 import { cn } from '@/lib/utils';
-import type { Note } from '@/types/note';
 
 // Walks up the DOM to find the nearest ancestor that actually scrolls,
 // falling back to the window when the content isn't clipped by an inner container.
@@ -57,7 +56,6 @@ interface TranscriptViewProps {
     mode: 'compact' | 'expanded';
     currentTime: number;
     isPlaying: boolean;
-    notes: Note[];
     speakerMappings: Record<string, string>;
     autoScrollEnabled: boolean;
     onSeek: (time: number) => void;
@@ -69,7 +67,6 @@ export const TranscriptView = forwardRef<HTMLDivElement, TranscriptViewProps>(({
     mode,
     currentTime,
     isPlaying,
-    // notes,
     speakerMappings,
     autoScrollEnabled,
     onSeek,
@@ -93,9 +90,8 @@ export const TranscriptView = forwardRef<HTMLDivElement, TranscriptViewProps>(({
         isPlaying
     );
 
-    // Click-to-Seek Handler. A plain click seeks; Ctrl/Cmd+click keeps working the
-    // same way since no modifier check gates it anymore. Skipped while the user has
-    // an active text selection so seeking doesn't fight the note-taking selection flow.
+    // Click-to-play handler. Skipped while the user has an active text selection so
+    // selecting text to copy doesn't jump the audio.
     const handleWordClick = useCallback((e: React.MouseEvent) => {
         const selection = window.getSelection();
         if (selection && !selection.isCollapsed && selection.toString().length > 0) return;

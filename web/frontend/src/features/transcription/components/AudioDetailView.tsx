@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
-import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, StickyNote, MessageCircle, FileImage, FileJson, Clock, AlertCircle, Users, Copy } from "lucide-react";
+import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, MessageCircle, FileJson, Clock, AlertCircle, Users, Copy } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { Header } from "@/components/Header";
 
@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 // Custom Hooks
 import { useAudioDetail, useUpdateTitle, useTranscript, type TranscriptSegment } from "@/features/transcription/hooks/useAudioDetail";
 import { useSpeakerMappings } from "@/features/transcription/hooks/useTranscriptionSpeakers";
-import { useTranscriptDownload } from "@/features/transcription/hooks/useTranscriptDownload";
+import { useTranscriptCopy } from "@/features/transcription/hooks/useTranscriptCopy";
 import { useTranscriptMode } from "@/hooks/use-transcript-mode";
 
 // Sub-components
@@ -48,10 +48,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
     // Lifted Transcript State
     const [transcriptMode, setTranscriptMode] = useTranscriptMode();
     const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
-    const [notesOpen, setNotesOpen] = useState(false);
     const [speakerRenameOpen, setSpeakerRenameOpen] = useState(false);
-    const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
-    const [downloadFormat, setDownloadFormat] = useState<'txt' | 'json'>('txt');
 
     // Dialog States
     const [executionDialogOpen, setExecutionDialogOpen] = useState(false);
@@ -65,19 +62,20 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
     const { data: transcript } = useTranscript(audioId || "", true);
     const { data: speakerMappings = {} } = useSpeakerMappings(audioId || "", true);
 
-    // Download Logic
-    const { downloadSRT, copyTXT } = useTranscriptDownload();
+    const { copyTXT, copyJSON } = useTranscriptCopy();
     const { toast } = useToast();
 
-    const handleCopyTranscript = async () => {
+    const handleCopy = async (copy: typeof copyTXT, successTitle: string) => {
         if (!transcript) return;
         try {
-            await copyTXT(transcript, speakerMappings);
-            toast({ title: 'Conversation copied to clipboard' });
+            await copy(transcript, speakerMappings);
+            toast({ title: successTitle });
         } catch {
-            toast({ title: 'Could not copy to clipboard', description: 'Your browser blocked clipboard access. Use Download Text instead.' });
+            toast({ title: 'Could not copy to clipboard', description: 'The browser blocked clipboard access. Allow it for this site and try again.' });
         }
     };
+
+    const hasSpeakers = transcript?.segments?.some((segment: TranscriptSegment) => segment.speaker) ?? false;
 
     // State for Split View
     const [chatOpen, setChatOpen] = useState(false);
@@ -139,26 +137,14 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
         setIsEditingTitle(false);
     };
 
+    // Clicking a word plays from that word, not just moves the playhead.
     const handleSeek = (time: number) => {
-        if (audioPlayerRef.current) {
-            audioPlayerRef.current.seekTo(time);
-            setCurrentTime(time);
-        }
+        const player = audioPlayerRef.current;
+        if (!player) return;
+        player.seekTo(time);
+        setCurrentTime(time);
+        if (!player.isPlaying()) player.playPause();
     };
-
-    if (!audioId) return <div>Invalid Audio ID</div>;
-
-    // Handler for notes/chat exclusivity
-    const handleSetNotesOpen = (open: boolean) => {
-        if (open) setChatOpen(false);
-        setNotesOpen(open);
-    };
-
-    const handleSetChatOpen = (open: boolean) => {
-        if (open) setNotesOpen(false);
-        setChatOpen(open);
-    };
-
 
     if (!audioId) return <div>Invalid Audio ID</div>;
 
@@ -326,7 +312,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                     {transcript?.word_segments && transcript.word_segments.length > 0 ? (
                                                         <DropdownMenuItem onClick={() => setTranscriptMode(transcriptMode === 'compact' ? 'expanded' : 'compact')} className="rounded-[8px] cursor-pointer">
                                                             {transcriptMode === 'compact' ? <List className="mr-2 h-4 w-4 opacity-70" /> : <AlignLeft className="mr-2 h-4 w-4 opacity-70" />}
-                                                            {transcriptMode === 'compact' ? 'Timeline View' : 'Compact View'}
+                                                            {transcriptMode === 'compact' ? 'Timeline View' : 'Prose View'}
                                                         </DropdownMenuItem>
                                                     ) : (
                                                         <DropdownMenuItem disabled className="rounded-[8px] opacity-50 cursor-not-allowed">
@@ -338,36 +324,20 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                         <ArrowDownCircle className={cn("mr-2 h-4 w-4 opacity-70", autoScrollEnabled && "text-[var(--brand-solid)]")} />
                                                         Auto Scroll {autoScrollEnabled ? 'On' : 'Off'}
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleSetNotesOpen(!notesOpen)} className="rounded-[8px] cursor-pointer">
-                                                        <StickyNote className={cn("mr-2 h-4 w-4 opacity-70", notesOpen && "text-[var(--brand-solid)]")} />
-                                                        Notes
-                                                    </DropdownMenuItem>
                                                     <DropdownMenuSeparator className="bg-[var(--border-subtle)] my-1" />
-                                                    <DropdownMenuItem onClick={() => handleSetChatOpen(!chatOpen)} className="rounded-[8px] cursor-pointer">
+                                                    <DropdownMenuItem onClick={() => setChatOpen(!chatOpen)} className="rounded-[8px] cursor-pointer">
                                                         <MessageCircle className={cn("mr-2 h-4 w-4 opacity-70", chatOpen && "text-[var(--brand-solid)]")} />
                                                         Chat with Audio
                                                     </DropdownMenuItem>
-                                                    {transcript?.segments?.some((s: TranscriptSegment) => s.speaker) && (
-                                                        <DropdownMenuItem onClick={() => setSpeakerRenameOpen(true)} className="rounded-[8px] cursor-pointer">
-                                                            <Users className="mr-2 h-4 w-4 opacity-70" />
-                                                            Rename Speakers
-                                                        </DropdownMenuItem>
-                                                    )}
                                                     <DropdownMenuItem onClick={() => setSummaryDialogOpen(true)} className="rounded-[8px] cursor-pointer text-[var(--brand-solid)] focus:text-[var(--brand-solid)] focus:bg-[var(--brand-light)]">
                                                         <Bot className="mr-2 h-4 w-4" /> AI Summary
                                                     </DropdownMenuItem>
                                                     <DropdownMenuSeparator className="bg-[var(--border-subtle)] my-1" />
-                                                    <DropdownMenuItem onClick={handleCopyTranscript} disabled={!transcript} className="rounded-[8px] cursor-pointer">
+                                                    <DropdownMenuItem onClick={() => handleCopy(copyTXT, 'Conversation copied to clipboard')} disabled={!transcript} className="rounded-[8px] cursor-pointer">
                                                         <Copy className="mr-2 h-4 w-4 opacity-70" /> Copy to Clipboard
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => transcript && downloadSRT(transcript, audioFile?.title || 'transcript', speakerMappings)} className="rounded-[8px] cursor-pointer">
-                                                        <FileImage className="mr-2 h-4 w-4 opacity-70" /> Download SRT
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => { setDownloadFormat('txt'); setDownloadDialogOpen(true); }} className="rounded-[8px] cursor-pointer">
-                                                        <AlignLeft className="mr-2 h-4 w-4 opacity-70" /> Download Text
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => { setDownloadFormat('json'); setDownloadDialogOpen(true); }} className="rounded-[8px] cursor-pointer">
-                                                        <FileJson className="mr-2 h-4 w-4 opacity-70" /> Download JSON
+                                                    <DropdownMenuItem onClick={() => handleCopy(copyJSON, 'Conversation copied as JSON')} disabled={!transcript} className="rounded-[8px] cursor-pointer">
+                                                        <FileJson className="mr-2 h-4 w-4 opacity-70" /> Copy as JSON
                                                     </DropdownMenuItem>
                                                     <DropdownMenuSeparator className="bg-[var(--border-subtle)] my-1" />
                                                     <DropdownMenuItem onClick={() => setExecutionDialogOpen(true)} className="rounded-[8px] cursor-pointer">
@@ -383,13 +353,31 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                 </div>
 
                                     {/* Audio Player */}
-                                    <div className="glass-card rounded-[var(--radius-card)] border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 md:p-6 mb-8 transition-all duration-300 hover:shadow-[var(--shadow-float)]">
-                                        <EmberPlayer
-                                            ref={audioPlayerRef}
-                                            audioId={audioId}
-                                            onTimeUpdate={handleTimeUpdate}
-                                            onPlayStateChange={setIsPlaying}
-                                        />
+                                    <div className="glass-card rounded-[var(--radius-card)] border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 md:p-6 mb-8 transition-all duration-300 hover:shadow-[var(--shadow-float)] flex items-center gap-3">
+                                        <div className="flex-1 min-w-0">
+                                            <EmberPlayer
+                                                ref={audioPlayerRef}
+                                                audioId={audioId}
+                                                onTimeUpdate={handleTimeUpdate}
+                                                onPlayStateChange={setIsPlaying}
+                                            />
+                                        </div>
+                                        {hasSpeakers && (
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="icon"
+                                                        onClick={() => setSpeakerRenameOpen(true)}
+                                                        aria-label="Rename speakers"
+                                                        className="flex-shrink-0 rounded-full border-[var(--border-subtle)] shadow-sm bg-[var(--bg-card)] hover:bg-[var(--bg-main)] transition-all"
+                                                    >
+                                                        <Users className="h-4 w-4 text-[var(--text-secondary)]" />
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>Rename speakers</TooltipContent>
+                                            </Tooltip>
+                                        )}
                                     </div>
                                 </div>
 
@@ -402,13 +390,8 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                     speakerMappings={speakerMappings}
                                     transcriptMode={transcriptMode}
                                     autoScrollEnabled={autoScrollEnabled}
-                                    notesOpen={notesOpen}
-                                    setNotesOpen={handleSetNotesOpen}
                                     speakerRenameOpen={speakerRenameOpen}
                                     setSpeakerRenameOpen={setSpeakerRenameOpen}
-                                    downloadDialogOpen={downloadDialogOpen}
-                                    setDownloadDialogOpen={setDownloadDialogOpen}
-                                    downloadFormat={downloadFormat}
                                     isPlaying={isPlaying}
                                 />
                             </div>
@@ -441,15 +424,6 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                     </>
                 )}
             </div>
-
-            {/* Mobile / Overlay Chat (If we want overlay behavior even on desktop, we can adjust logic) */}
-            {/* Note: User asked for sliding over on mobile. NotesSidebar handles this via portal internally often, or we do it here.
-                 Let's do it here for Chat.
-             */}
-            {/* If we define isMobile properly (using hook), we can conditional rendering.
-                 Since I don't have the hook imported in this snippet yet, I will add it.
-              */}
-
 
             {/* Dialogs */}
             <ExecutionInfoDialog
