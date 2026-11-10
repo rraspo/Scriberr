@@ -57,31 +57,28 @@ Do not substitute a local Docker build when the Docker socket is unavailable.
 
 ## Deploy
 
-- **Targets:** one homelab container (the owner's live transcription service, holding the real
-  transcripts and profiles) running a locally built `scriberr-fork:<branch>-<short-sha>` image
-  from a compose stack on the local fleet. It is production: its data is the owner's real
-  data. No public or hosted target; the repo publishes no image or release.
-- **Path:** local fleet, direct (no Mission Control runbook exists for it): build the image on the
-  host with an explicit traceable tag, edit only the `image:` line of the service's compose
-  file, recreate the container. The fork's companion sidecars in the same stack (the folder
-  watcher) are pinned to the identical tag so fork and watcher never skew.
-- **Hard rules:** never tag or run `latest` (a rollback must be able to name exactly what was
-  running). Rehearse the new image against a copy of the data directory on a spare port before
-  touching the live service; if the migration mangles the copy, stop. Back up the sqlite DB
-  before every live change, copying the `-wal` and `-shm` siblings alongside it (the bare `.db`
-  is stale in WAL mode), and confirm after the recreate that the migration was additive
-  (profiles and transcripts intact). The compose edit must preserve `QUEUE_WORKERS=1`, the
-  memory/cpu limits and all data/env/cache mounts. Secrets (HF token env file, remote SSH
-  service key mounted read-only) stay out of the image and out of every tracked file; never
-  read or print them. Rollback is restoring the previous `image:` tag (or
-  `ghcr.io/rishikanthc/scriberr:v1.2.0`) and recreating.
-- **Owner go required for:** every recreate of the live container (a fresh, explicit
-  confirmation at execution time, not carried over from an earlier deploy), a rollback
-  recreate, credential or secret changes, and any change to the profile table or DB beyond an
-  additive migration.
-- **Verify:** `docker inspect` of the container shows the new tag with its short SHA; the HTTPS
-  root answers 200; existing transcripts, audio playback and profiles render; `docker exec` of
-  `env | grep QUEUE_WORKERS` prints `1`; the DB backup path is recorded.
+- **Targets:** one container on the owner's local fleet, the owner's own transcription tool,
+  running a locally built `scriberr-fork:<branch>-<short-sha>` image from a compose stack. It
+  holds the owner's real transcripts and profiles. No public or hosted target; the repo
+  publishes no image or release.
+- **When:** shipping is part of finishing. A change is done when it runs in the local
+  container, so a session builds and recreates in the same turn it verifies the change,
+  without asking. Build from the branch the live image runs plus the change, so nothing
+  already live drops out.
+- **Path:** local fleet, direct (no Mission Control runbook): build the image with an explicit
+  traceable tag, back up the DB, edit only the `image:` lines of the stack's compose file,
+  recreate. The folder-watcher sidecar is pinned to the identical tag so fork and watcher
+  never skew.
+- **Hard rules:** never tag or run `latest` (a rollback must name exactly what was running).
+  Before every recreate, copy the sqlite DB with its `-wal` and `-shm` siblings into the
+  stack's `backups/` folder (the bare `.db` is stale in WAL mode). The compose edit preserves
+  `QUEUE_WORKERS=1`, the memory/cpu limits and all data/env/cache mounts. Secrets (HF token env
+  file, remote SSH service key mounted read-only) stay out of the image and every tracked file;
+  never read or print them. Rollback is restoring the previous `image:` tag and recreating.
+- **Owner go required for:** credential or secret changes, and any DB change beyond an
+  additive migration (dropping or rewriting columns, tables or rows).
+- **Verify:** `docker inspect` shows the new tag on both containers; the root answers 200;
+  `docker exec` of `env | grep QUEUE_WORKERS` prints `1`; the backup path is reported.
 
 ## Product language
 
