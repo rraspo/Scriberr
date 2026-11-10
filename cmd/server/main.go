@@ -20,6 +20,7 @@ import (
 	"scriberr/internal/repository"
 	"scriberr/internal/service"
 	"scriberr/internal/sse"
+	"scriberr/internal/summary"
 	"scriberr/internal/transcription"
 	"scriberr/internal/transcription/adapters"
 	"scriberr/internal/transcription/registry"
@@ -149,7 +150,6 @@ func main() {
 	// Initialize task queue
 	logger.Startup("queue", "Starting background processing")
 	taskQueue := queue.NewTaskQueue(2, unifiedProcessor, jobRepo) // 2 workers
-	taskQueue.Start()
 	defer taskQueue.Stop()
 
 	// Initialize multi-track processor
@@ -180,6 +180,16 @@ func main() {
 	handler.SetSpeakerProfileRepo(speakerProfileRepo)
 	handler.SetSpeakerEmbeddingExtractor(speakerEmbeddingExtractor)
 	handler.SetJobReconciler(jobReconciler)
+
+	autoSummarizer := summary.NewAutoSummarizer(summaryRepo, jobRepo, speakerMappingRepo, handler.LLMService)
+	taskQueue.SetAfterCompletion(func(ctx context.Context, jobID string) {
+		summaryCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+		defer cancel()
+		if err := autoSummarizer.Summarize(summaryCtx, jobID); err != nil {
+			logger.Warn("Automatic summary failed", "job_id", jobID, "error", err)
+		}
+	})
+	taskQueue.Start()
 
 	// Set up router
 	router := api.SetupRoutes(handler, authService)

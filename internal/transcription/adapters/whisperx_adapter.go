@@ -416,35 +416,45 @@ func (w *WhisperXAdapter) Transcribe(ctx context.Context, input interfaces.Audio
 	defer w.CleanupTempDirectory(tempDir)
 
 	if procCtx.Execution.Mode == "remote" {
-		transport, err := w.remoteTransportFactory(procCtx.Execution)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create remote transport: %w", err)
-		}
-		executor := NewRemoteWhisperXExecutor(transport, procCtx.Execution)
-		if err := executor.Execute(ctx, procCtx.JobID, input.FilePath, params, tempDir, filepath.Join(procCtx.OutputDirectory, "transcription.log")); err != nil {
-			decision := classifyRemoteFailure(err)
-			if !decision.Fallback {
-				recordExecutionPath(procCtx, "remote", decision.Reason)
-				return nil, fmt.Errorf("WhisperX remote execution failed: %w", err)
-			}
-			logger.Warn("Remote WhisperX unavailable; falling back to local CPU execution",
-				"host", procCtx.Execution.RemoteHost, "port", procCtx.Execution.RemotePort)
-			recordExecutionPath(procCtx, "local-fallback", decision.Reason)
-			procCtx.Execution.Mode = "local"
-			params = fallbackParameters(procCtx, params)
-			if w.localFallback != nil {
-				return w.localFallback(ctx, input, params, procCtx)
-			}
-		} else {
+		primary := procCtx.Execution
+		result, decision, err := w.transcribeRemote(ctx, primary, input, params, tempDir, procCtx, startTime)
+		if err == nil {
 			recordExecutionPath(procCtx, "remote", "")
-			result, err := w.parseResult(tempDir, input, params)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse result: %w", err)
-			}
-			result.ProcessingTime = time.Since(startTime)
-			result.ModelUsed = w.GetStringParameter(params, "model")
-			result.Metadata = w.CreateDefaultMetadata(params)
 			return result, nil
+		}
+		if !decision.Fallback {
+			recordExecutionPath(procCtx, "remote", decision.Reason)
+			return nil, fmt.Errorf("WhisperX remote execution failed: %w", err)
+		}
+		localReason := decision.Reason
+
+		// A second GPU host, when the fallback profile names one, comes before
+		// local CPU: CPU is minutes per minute of audio, any GPU is seconds.
+		if second := procCtx.FallbackExecution; second.Mode == "remote" && second.RemoteHost != primary.RemoteHost {
+			logger.Warn("Primary GPU host unavailable; running on the fallback GPU host",
+				"primary", primary.RemoteHost, "fallback", second.RemoteHost, "reason", decision.Reason)
+			secondParams := profileFallbackParameters(procCtx, params)
+			primaryReason := fmt.Sprintf("%s on %s", decision.Reason, primary.RemoteHost)
+			result, secondDecision, err := w.transcribeRemote(ctx, second, input, secondParams, tempDir, procCtx, startTime)
+			if err == nil {
+				recordExecutionPath(procCtx, "remote-fallback", primaryReason+"; ran on "+second.RemoteHost)
+				return result, nil
+			}
+			bothReasons := fmt.Sprintf("%s; %s on %s", primaryReason, secondDecision.Reason, second.RemoteHost)
+			if !secondDecision.Fallback {
+				recordExecutionPath(procCtx, "remote-fallback", bothReasons)
+				return nil, fmt.Errorf("WhisperX fallback GPU host execution failed: %w", err)
+			}
+			localReason = bothReasons
+		}
+
+		logger.Warn("Remote WhisperX unavailable; falling back to local CPU execution",
+			"host", primary.RemoteHost, "port", primary.RemotePort)
+		recordExecutionPath(procCtx, "local-fallback", localReason)
+		procCtx.Execution.Mode = "local"
+		params = fallbackParameters(procCtx, params)
+		if w.localFallback != nil {
+			return w.localFallback(ctx, input, params, procCtx)
 		}
 	} else {
 		recordExecutionPath(procCtx, "local", "")
@@ -536,10 +546,20 @@ func (w *WhisperXAdapter) Transcribe(ctx context.Context, input interfaces.Audio
 // profile's model and batch size are sized for a 4090, not for the container's
 // cores. Without one, the job keeps its own parameters forced onto CPU.
 func fallbackParameters(procCtx interfaces.ProcessingContext, params map[string]interface{}) map[string]interface{} {
+	return localCPUParameters(profileFallbackParameters(procCtx, params))
+}
+
+// profileFallbackParameters returns the is_fallback profile's parameters as
+// they are, for a second GPU host, or the job's own when there is no such
+// profile.
+func profileFallbackParameters(procCtx interfaces.ProcessingContext, params map[string]interface{}) map[string]interface{} {
 	if len(procCtx.FallbackParameters) == 0 {
-		return localCPUParameters(params)
+		return params
 	}
-	fallback := localCPUParameters(procCtx.FallbackParameters)
+	fallback := make(map[string]interface{}, len(procCtx.FallbackParameters))
+	for key, value := range procCtx.FallbackParameters {
+		fallback[key] = value
+	}
 	// The credential belongs to the deployment, not the profile, and the
 	// fallback profile may not carry one.
 	if _, ok := fallback["hf_token"]; !ok {
@@ -558,6 +578,27 @@ func localCPUParameters(params map[string]interface{}) map[string]interface{} {
 	localParams["device"] = "cpu"
 	localParams["compute_type"] = "float32"
 	return localParams
+}
+
+// transcribeRemote runs one remote attempt and parses its output. On failure
+// the decision says whether the next tier may take the job.
+func (w *WhisperXAdapter) transcribeRemote(ctx context.Context, execution models.ProfileExecution, input interfaces.AudioInput, params map[string]interface{}, tempDir string, procCtx interfaces.ProcessingContext, startTime time.Time) (*interfaces.TranscriptResult, remoteFailureDecision, error) {
+	transport, err := w.remoteTransportFactory(execution)
+	if err != nil {
+		return nil, remoteFailureDecision{Reason: "remote transport unavailable"}, fmt.Errorf("failed to create remote transport: %w", err)
+	}
+	executor := NewRemoteWhisperXExecutor(transport, execution)
+	if err := executor.Execute(ctx, procCtx.JobID, input.FilePath, params, tempDir, filepath.Join(procCtx.OutputDirectory, "transcription.log")); err != nil {
+		return nil, classifyRemoteFailure(err), err
+	}
+	result, err := w.parseResult(tempDir, input, params)
+	if err != nil {
+		return nil, remoteFailureDecision{Reason: "remote output unreadable"}, fmt.Errorf("failed to parse result: %w", err)
+	}
+	result.ProcessingTime = time.Since(startTime)
+	result.ModelUsed = w.GetStringParameter(params, "model")
+	result.Metadata = w.CreateDefaultMetadata(params)
+	return result, remoteFailureDecision{}, nil
 }
 
 func recordExecutionPath(procCtx interfaces.ProcessingContext, path, reason string) {

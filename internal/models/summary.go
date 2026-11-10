@@ -15,7 +15,10 @@ type SummaryTemplate struct {
 	Model              string    `json:"model" gorm:"type:varchar(255);not null;default:''"`
 	Prompt             string    `json:"prompt" gorm:"type:text;not null"`
 	IncludeSpeakerInfo bool      `json:"include_speaker_info" gorm:"default:false"`
-	CreatedAt          time.Time `json:"created_at" gorm:"autoCreateTime"`
+	// AutoGenerate marks the template run on every transcription right after it
+	// completes. The oldest flagged template wins when several are.
+	AutoGenerate bool      `json:"auto_generate" gorm:"default:false"`
+	CreatedAt    time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt          time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
 

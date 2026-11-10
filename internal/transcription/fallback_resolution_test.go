@@ -44,7 +44,7 @@ func TestResolveFallbackParametersPicksMatchingLanguage(t *testing.T) {
 		fallbackProfile("Spanish", "es", "small"),
 	)
 
-	params := service.resolveFallbackParameters(context.Background(), stringPtr("es"))
+	params, _ := service.resolveFallback(context.Background(), stringPtr("es"))
 
 	require.Equal(t, "es", params["language"])
 	require.Equal(t, "small", params["model"])
@@ -56,7 +56,7 @@ func TestResolveFallbackParametersPicksEnglishForEnglishJob(t *testing.T) {
 		fallbackProfile("Spanish", "es", "small"),
 	)
 
-	params := service.resolveFallbackParameters(context.Background(), stringPtr("en"))
+	params, _ := service.resolveFallback(context.Background(), stringPtr("en"))
 
 	require.Equal(t, "en", params["language"])
 }
@@ -64,7 +64,7 @@ func TestResolveFallbackParametersPicksEnglishForEnglishJob(t *testing.T) {
 func TestResolveFallbackParametersMatchesCaseInsensitively(t *testing.T) {
 	service := serviceWithFallbacks(fallbackProfile("Spanish", "ES", "small"))
 
-	params := service.resolveFallbackParameters(context.Background(), stringPtr("es"))
+	params, _ := service.resolveFallback(context.Background(), stringPtr("es"))
 
 	require.Equal(t, "ES", params["language"])
 }
@@ -73,7 +73,7 @@ func TestResolveFallbackParametersMatchesCaseInsensitively(t *testing.T) {
 func TestResolveFallbackParametersKeepsJobLanguageWhenNoProfileMatches(t *testing.T) {
 	service := serviceWithFallbacks(fallbackProfile("Spanish", "es", "small"))
 
-	params := service.resolveFallbackParameters(context.Background(), stringPtr("de"))
+	params, _ := service.resolveFallback(context.Background(), stringPtr("de"))
 
 	require.Equal(t, "de", params["language"])
 	require.Equal(t, "small", params["model"])
@@ -85,7 +85,7 @@ func TestResolveFallbackParametersWithoutJobLanguageUsesFirstProfile(t *testing.
 		fallbackProfile("Spanish", "es", "small"),
 	)
 
-	params := service.resolveFallbackParameters(context.Background(), nil)
+	params, _ := service.resolveFallback(context.Background(), nil)
 
 	require.Equal(t, "en", params["language"])
 }
@@ -93,11 +93,30 @@ func TestResolveFallbackParametersWithoutJobLanguageUsesFirstProfile(t *testing.
 func TestResolveFallbackParametersNilWhenNoneFlagged(t *testing.T) {
 	service := serviceWithFallbacks()
 
-	require.Nil(t, service.resolveFallbackParameters(context.Background(), stringPtr("es")))
+	params, _ := service.resolveFallback(context.Background(), stringPtr("es"))
+	require.Nil(t, params)
 }
 
 func TestResolveFallbackParametersNilWithoutProfileRepository(t *testing.T) {
 	service := NewUnifiedTranscriptionService(nil, t2Dir(), t2Dir())
 
-	require.Nil(t, service.resolveFallbackParameters(context.Background(), stringPtr("es")))
+	params, _ := service.resolveFallback(context.Background(), stringPtr("es"))
+	require.Nil(t, params)
+}
+
+func TestResolveFallbackReturnsTheChosenProfilesGPUHost(t *testing.T) {
+	spanish := fallbackProfile("Spanish", "es", "large-v3-turbo")
+	spanish.ExecutionMode = "remote"
+	spanish.RemoteHost = "second-gpu.example"
+	spanish.RemoteUser = "scriberr"
+	spanish.RemoteWorkDir = "/srv/second"
+	service := serviceWithFallbacks(fallbackProfile("English", "en", "small"), spanish)
+
+	params, execution := service.resolveFallback(context.Background(), stringPtr("es"))
+
+	require.Equal(t, "large-v3-turbo", params["model"])
+	require.Equal(t, "remote", execution.Mode)
+	require.Equal(t, "second-gpu.example", execution.RemoteHost)
+	require.Equal(t, "scriberr", execution.RemoteUser)
+	require.Equal(t, "/srv/second", execution.RemoteWorkDir)
 }

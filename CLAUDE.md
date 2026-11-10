@@ -140,13 +140,40 @@ initial implementation uses `ssh.InsecureIgnoreHostKey`; this is an explicit
 single-user LAN deployment trade-off that avoids requiring new configuration
 before a host-key management UI or setting exists.
 
-Remote execution falls back to local CPU only when the remote service is
+Remote execution moves to the next tier only when the remote service is
 unavailable: connection refusal, host lookup failure, SSH authentication
 failure, connection timeout, or a missing remote wrapper (exit status 127).
-Once the wrapper runs, its job-level exit statuses 2, 3, and 4 fail the job
-without local fallback so configuration and transcription errors stay visible.
+Once a wrapper runs, its job-level exit statuses 2, 3, and 4 fail the job
+without further fallback so configuration and transcription errors stay visible.
 
-Each transcription job stores `execution_path` as `remote`, `local`, or
-`local-fallback`, plus a short `execution_reason`. Both fields are returned by
-the job API. The job view displays a badge for remote and fallback execution;
-plain local execution remains visually unchanged.
+The tiers are: the job's own remote host; then, when the `is_fallback` profile
+matching the job's language is itself `remote` on a different host, that
+second GPU host with that profile's parameters; then local CPU with the
+fallback profile's parameters forced to `cpu`/`float32`. A second GPU host's
+wrapper keeps the same contract as the first and may block until its card has
+room, so a busy shared card makes the job wait rather than fail.
+
+Each transcription job stores `execution_path` as `remote`, `remote-fallback`
+(ran on the second GPU host), `local`, or `local-fallback`, plus a short
+`execution_reason`. Both fields are returned by the job API. The job view
+displays a badge for every path except plain local execution.
+
+## LLM and automatic summary
+
+`OLLAMA_ENDPOINTS` (`url=model,url=model`, in order of preference), when set,
+replaces the stored LLM configuration: each request goes to the first host
+whose `/api/version` answers within three seconds and runs that host's model,
+whatever model a template or chat names. `GET /api/v1/llm/config` reports the
+endpoint list as an active Ollama configuration, which is what the frontend's
+LLM-ready check reads.
+
+Every Ollama request sets `num_ctx` from the length of its own messages
+(about three characters per token plus 2048 for the answer, rounded up to a
+multiple of 4096, between 4096 and 32768) and `think: false`; Ollama
+otherwise truncates long transcripts silently.
+
+A summary template flagged `auto_generate` runs on every job right after the
+queue marks it completed, inside the same worker, so the summary never
+overlaps the next transcription on a shared GPU. The oldest flagged template
+wins. The prompt is built exactly as the summary dialog builds it. A failed
+automatic summary is logged and leaves the job completed.

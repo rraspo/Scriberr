@@ -16,6 +16,7 @@ type SummaryTemplateRequest struct {
 	Model              string  `json:"model" binding:"required,min=1"`
 	Prompt             string  `json:"prompt" binding:"required,min=1"`
 	IncludeSpeakerInfo *bool   `json:"include_speaker_info"`
+	AutoGenerate       *bool   `json:"auto_generate"`
 }
 
 type SummarySettingsRequest struct {
@@ -76,6 +77,9 @@ func (h *Handler) CreateSummaryTemplate(c *gin.Context) {
 	}
 	if req.IncludeSpeakerInfo != nil {
 		item.IncludeSpeakerInfo = *req.IncludeSpeakerInfo
+	}
+	if req.AutoGenerate != nil {
+		item.AutoGenerate = *req.AutoGenerate
 	}
 	if err := h.summaryRepo.Create(c.Request.Context(), item); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create template"})
@@ -141,6 +145,9 @@ func (h *Handler) UpdateSummaryTemplate(c *gin.Context) {
 	item.Prompt = req.Prompt
 	if req.IncludeSpeakerInfo != nil {
 		item.IncludeSpeakerInfo = *req.IncludeSpeakerInfo
+	}
+	if req.AutoGenerate != nil {
+		item.AutoGenerate = *req.AutoGenerate
 	}
 	item.UpdatedAt = time.Now()
 	if err := h.summaryRepo.Update(c.Request.Context(), item); err != nil {

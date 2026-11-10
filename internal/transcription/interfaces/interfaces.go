@@ -117,6 +117,10 @@ type ProcessingContext struct {
 	// job's own parameters, so a GPU-sized profile does not run large-v3 on the
 	// container's cores. Nil when no fallback profile is configured.
 	FallbackParameters map[string]interface{} `json:"-"`
+	// FallbackExecution is the is_fallback profile's execution target. When it
+	// is remote, an unreachable primary GPU host hands the job to that second
+	// GPU host before anything drops to local CPU.
+	FallbackExecution models.ProfileExecution `json:"-"`
 }
 
 // ModelAdapter is the base interface that all model adapters must implement

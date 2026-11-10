@@ -14,6 +14,7 @@ export interface SummaryTemplate {
   model?: string;
   prompt: string;
   include_speaker_info?: boolean;
+  auto_generate?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -31,6 +32,7 @@ export function SummaryTemplateDialog({ open, onOpenChange, onSave, initial }: S
   const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
   const [includeSpeakerInfo, setIncludeSpeakerInfo] = useState(false);
+  const [autoGenerate, setAutoGenerate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const { getAuthHeaders } = useAuth();
@@ -42,6 +44,7 @@ export function SummaryTemplateDialog({ open, onOpenChange, onSave, initial }: S
       setModel(initial?.model || "");
       setPrompt(initial?.prompt || "");
       setIncludeSpeakerInfo(initial?.include_speaker_info || false);
+      setAutoGenerate(initial?.auto_generate || false);
       // Load models when dialog opens
       (async () => {
         try {
@@ -68,7 +71,8 @@ export function SummaryTemplateDialog({ open, onOpenChange, onSave, initial }: S
         description: description.trim() || undefined,
         model: model.trim(),
         prompt: prompt.trim(),
-        include_speaker_info: includeSpeakerInfo
+        include_speaker_info: includeSpeakerInfo,
+        auto_generate: autoGenerate
       });
       onOpenChange(false);
     } finally {
@@ -152,6 +156,13 @@ Summarize the following transcript into concise bullet points. Focus on key deci
             label="Include speaker identification in transcript"
             checked={includeSpeakerInfo}
             onCheckedChange={setIncludeSpeakerInfo}
+          />
+
+          <SwitchField
+            id="autoGenerate"
+            label="Generate automatically after each transcription"
+            checked={autoGenerate}
+            onCheckedChange={setAutoGenerate}
           />
         </div>
 

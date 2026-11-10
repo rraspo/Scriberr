@@ -78,8 +78,22 @@ type Segment struct {
 	Speaker string  `json:"speaker"`
 }
 
+// LLMService resolves the active LLM service for work outside a request,
+// such as the automatic summary after a transcription.
+func (h *Handler) LLMService(ctx context.Context) (llm.Service, error) {
+	service, _, err := h.getLLMService(ctx)
+	return service, err
+}
+
 // getLLMService returns a provider-agnostic LLM service based on active config
 func (h *Handler) getLLMService(ctx context.Context) (llm.Service, string, error) {
+	failover, err := llm.OllamaFailoverFromEnvironment()
+	if err != nil {
+		return nil, "ollama", err
+	}
+	if failover != nil {
+		return failover, "ollama", nil
+	}
 	cfg, err := h.llmConfigRepo.GetActive(ctx)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {

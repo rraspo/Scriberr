@@ -92,19 +92,21 @@ func (u *UnifiedTranscriptionService) SetSpeakerIdentifier(identifier *SpeakerId
 	u.speakerIdentifier = identifier
 }
 
-// resolveFallbackParameters returns the parameters of the CPU fallback profile
-// best matching the job's language, or nil when none is configured. A missing
+// resolveFallback returns the parameters and execution target of the
+// is_fallback profile best matching the job's language, or nil parameters when
+// none is configured. A remote execution target is the second GPU host tried
+// before local CPU. A missing
 // fallback profile is normal, not an error: the job then falls back on its own
 // parameters. When no flagged profile matches the language, the first is used
 // but the job's own language is kept — a small model in the right language
 // beats a large one in the wrong one.
-func (u *UnifiedTranscriptionService) resolveFallbackParameters(ctx context.Context, jobLanguage *string) map[string]interface{} {
+func (u *UnifiedTranscriptionService) resolveFallback(ctx context.Context, jobLanguage *string) (map[string]interface{}, models.ProfileExecution) {
 	if u.profileRepo == nil {
-		return nil
+		return nil, models.ProfileExecution{}
 	}
 	candidates, err := u.profileRepo.FindFallbacks(ctx)
 	if err != nil || len(candidates) == 0 {
-		return nil
+		return nil, models.ProfileExecution{}
 	}
 
 	wanted := ""
@@ -129,9 +131,14 @@ func (u *UnifiedTranscriptionService) resolveFallbackParameters(ctx context.Cont
 	if !matched && wanted != "" {
 		params["language"] = wanted
 	}
-	logger.Info("Resolved CPU fallback profile",
-		"profile", chosen.Name, "job_language", wanted, "language_matched", matched)
-	return params
+	logger.Info("Resolved fallback profile", "profile", chosen.Name, "execution_mode", chosen.ExecutionMode,
+		"job_language", wanted, "language_matched", matched)
+	return params, models.ProfileExecution{
+		Mode: chosen.ExecutionMode, RemoteHost: chosen.RemoteHost, RemotePort: chosen.RemotePort,
+		RemoteUser: chosen.RemoteUser, RemoteKeyPath: chosen.RemoteKeyPath,
+		RemoteWorkDir: chosen.RemoteWorkDir, RemoteCommandPrefix: chosen.RemoteCommandPrefix,
+		ConnectTimeoutSeconds: chosen.RemoteConnectTimeoutSeconds,
+	}
 }
 
 // Initialize prepares all registered models for use
@@ -284,7 +291,7 @@ func (u *UnifiedTranscriptionService) processSingleTrackJob(ctx context.Context,
 		},
 	}
 	if job.Execution.Mode == "remote" {
-		procCtx.FallbackParameters = u.resolveFallbackParameters(ctx, job.Parameters.Language)
+		procCtx.FallbackParameters, procCtx.FallbackExecution = u.resolveFallback(ctx, job.Parameters.Language)
 	}
 
 	// Create output directory

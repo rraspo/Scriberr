@@ -3,6 +3,8 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 
 
 // Types
+export type ExecutionPath = "remote" | "remote-fallback" | "local" | "local-fallback";
+
 export interface MultiTrackFile {
     id: number;
     file_name: string;
@@ -55,7 +57,7 @@ export interface AudioFile {
     created_at: string;
     audio_path: string;
     diarization?: boolean;
-    execution_path?: "remote" | "local" | "local-fallback";
+    execution_path?: ExecutionPath;
     execution_reason?: string;
     is_multi_track?: boolean;
     multi_track_files?: MultiTrackFile[];

@@ -78,6 +78,32 @@ type ollamaChatRequest struct {
 	Messages []ollamaChatMessage `json:"messages"`
 	Stream   bool                `json:"stream"`
 	Options  map[string]any      `json:"options,omitempty"`
+	Think    bool                `json:"think"`
+}
+
+// Ollama drops whatever does not fit in num_ctx without saying so, and its
+// default window is far smaller than a long meeting, so every request asks
+// for a window sized to its own text plus room for the answer.
+const (
+	minimumContextTokens = 4096
+	maximumContextTokens = 32768
+	answerTokens         = 2048
+	charactersPerToken   = 3
+)
+
+func ollamaOptions(messages []ChatMessage, temperature float64) map[string]any {
+	characters := 0
+	for _, message := range messages {
+		characters += len(message.Content)
+	}
+	needed := characters/charactersPerToken + answerTokens
+	size := (needed + minimumContextTokens - 1) / minimumContextTokens * minimumContextTokens
+	size = max(minimumContextTokens, min(size, maximumContextTokens))
+	options := map[string]any{"num_ctx": size}
+	if temperature > 0 {
+		options["temperature"] = temperature
+	}
+	return options
 }
 
 type ollamaChatResponse struct {
@@ -100,9 +126,7 @@ func (s *OllamaService) ChatCompletion(ctx context.Context, model string, messag
 		Model:    model,
 		Messages: msgs,
 		Stream:   false,
-	}
-	if temperature > 0 {
-		reqBody.Options = map[string]any{"temperature": temperature}
+		Options:  ollamaOptions(messages, temperature),
 	}
 	data, err := json.Marshal(reqBody)
 	if err != nil {
@@ -156,10 +180,7 @@ func (s *OllamaService) ChatCompletionStream(ctx context.Context, model string, 
 		for _, m := range messages {
 			msgs = append(msgs, ollamaChatMessage(m))
 		}
-		reqBody := ollamaChatRequest{Model: model, Messages: msgs, Stream: true}
-		if temperature > 0 {
-			reqBody.Options = map[string]any{"temperature": temperature}
-		}
+		reqBody := ollamaChatRequest{Model: model, Messages: msgs, Stream: true, Options: ollamaOptions(messages, temperature)}
 
 		data, err := json.Marshal(reqBody)
 		if err != nil {

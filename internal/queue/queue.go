@@ -38,6 +38,15 @@ type TaskQueue struct {
 	autoScale      bool
 	lastScaleTime  time.Time
 	jobRepo        repository.JobRepository
+	// afterCompletion runs in the worker once a job is marked completed, so
+	// follow-up GPU work such as the automatic summary never overlaps the
+	// next transcription.
+	afterCompletion func(ctx context.Context, jobID string)
+}
+
+// SetAfterCompletion registers the step run after each completed job.
+func (tq *TaskQueue) SetAfterCompletion(step func(ctx context.Context, jobID string)) {
+	tq.afterCompletion = step
 }
 
 // JobProcessor defines the interface for processing jobs
@@ -256,6 +265,8 @@ func (tq *TaskQueue) worker(id int) {
 				logger.Debug("Job processed successfully", "worker_id", id, "job_id", jobID)
 				if err := tq.updateJobStatus(jobID, models.StatusCompleted); err != nil {
 					logger.Error("Failed to update job status", "job_id", jobID, "error", err)
+				} else if tq.afterCompletion != nil {
+					tq.afterCompletion(tq.ctx, jobID)
 				}
 			}
 

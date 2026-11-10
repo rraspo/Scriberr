@@ -17,6 +17,7 @@ import (
 
 	"scriberr/internal/auth"
 	"scriberr/internal/config"
+	"scriberr/internal/llm"
 	"scriberr/internal/models"
 	"scriberr/internal/processing"
 	"scriberr/internal/queue"
@@ -2042,6 +2043,16 @@ func (h *Handler) DeleteAPIKey(c *gin.Context) {
 // @Security BearerAuth
 // @Router /api/v1/llm/config [get]
 func (h *Handler) GetLLMConfig(c *gin.Context) {
+	failover, err := llm.OllamaFailoverFromEnvironment()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if failover != nil {
+		endpoints := failover.Endpoints()
+		c.JSON(http.StatusOK, LLMConfigResponse{Provider: "ollama", BaseURL: &endpoints, IsActive: true})
+		return
+	}
 	config, err := h.llmConfigRepo.GetActive(c.Request.Context())
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {

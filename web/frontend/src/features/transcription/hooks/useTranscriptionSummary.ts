@@ -25,6 +25,22 @@ export function useSummaryTemplates() {
     });
 }
 
+// The summary and chat need an active LLM configuration; without one the
+// summary dialog says so instead of offering a button that cannot work.
+export function useLLMReady() {
+    const { getAuthHeaders } = useAuth();
+    return useQuery({
+        queryKey: ["llmReady"],
+        queryFn: async () => {
+            const response = await fetch("/api/v1/llm/config", { headers: getAuthHeaders() });
+            if (!response.ok) return false;
+            const config = await response.json() as { is_active?: boolean };
+            return config.is_active === true;
+        },
+        staleTime: 60 * 1000,
+    });
+}
+
 export function useExistingSummary(audioId: string) {
     const { getAuthHeaders } = useAuth();
     return useQuery({

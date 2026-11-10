@@ -13,9 +13,10 @@ import { EmberPlayer, type EmberPlayerRef } from "@/components/audio/EmberPlayer
 import { cn } from "@/lib/utils";
 
 // Custom Hooks
-import { useAudioDetail, useUpdateTitle, useTranscript, type TranscriptSegment } from "@/features/transcription/hooks/useAudioDetail";
+import { useAudioDetail, useUpdateTitle, useTranscript, type ExecutionPath, type TranscriptSegment } from "@/features/transcription/hooks/useAudioDetail";
 import { useSpeakerMappings } from "@/features/transcription/hooks/useTranscriptionSpeakers";
 import { useTranscriptCopy } from "@/features/transcription/hooks/useTranscriptCopy";
+import { useLLMReady } from "@/features/transcription/hooks/useTranscriptionSummary";
 import { useTranscriptMode } from "@/hooks/use-transcript-mode";
 
 // Sub-components
@@ -25,6 +26,13 @@ import { LogsDialog } from "./audio-detail/LogsDialog";
 import { SummaryDialog } from "./audio-detail/SummaryDialog";
 import { ChatSidePanel } from "./ChatSidePanel";
 import { useIsMobile } from "@/hooks/use-mobile";
+
+const EXECUTION_PATH_LABELS: Record<ExecutionPath, string> = {
+    "remote": "Remote",
+    "remote-fallback": "Fallback GPU",
+    "local": "Local",
+    "local-fallback": "Local fallback",
+};
 
 // Types
 interface AudioDetailViewProps {
@@ -57,6 +65,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
 
     // Data Fetching
     const { data: audioFile, isLoading, error } = useAudioDetail(audioId || "");
+    const { data: llmReady } = useLLMReady();
     const { mutate: updateTitle } = useUpdateTitle(audioId || "");
     // Fetch transcript & speakers here to support menu actions
     const { data: transcript } = useTranscript(audioId || "", true);
@@ -268,11 +277,11 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
                                                             <span className="cursor-help rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 text-[10px] text-[var(--text-secondary)]">
-                                                                {audioFile.execution_path === "remote" ? "Remote" : "Local fallback"}
+                                                                {EXECUTION_PATH_LABELS[audioFile.execution_path]}
                                                             </span>
                                                         </TooltipTrigger>
                                                         <TooltipContent>
-                                                            {audioFile.execution_reason || (audioFile.execution_path === "remote" ? "Executed remotely" : "Remote execution was unavailable")}
+                                                            {audioFile.execution_reason || (audioFile.execution_path === "local-fallback" ? "Remote execution was unavailable" : "Executed remotely")}
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 )}
@@ -440,7 +449,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                 audioId={audioId}
                 isOpen={summaryDialogOpen}
                 onClose={setSummaryDialogOpen}
-                llmReady={true}
+                llmReady={llmReady ?? null}
             />
 
             {/* Mobile / Overlay Chat */}
