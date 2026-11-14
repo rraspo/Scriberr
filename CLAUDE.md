@@ -71,7 +71,8 @@ Do not substitute a local Docker build when the Docker socket is unavailable.
 - **Path:** local fleet, direct (no Mission Control runbook): build the image with an explicit
   traceable tag, back up the DB, edit only the `image:` lines of the stack's compose file,
   recreate. The folder-watcher sidecar is pinned to the identical tag so fork and watcher
-  never skew.
+  never skew, and runs `watch --source whatsapp` so the WhatsApp audio it uploads is told
+  apart from meetings by its job `source`.
 - **Hard rules:** never tag or run `latest` (a rollback must name exactly what was running).
   Before every recreate, copy the sqlite DB with its `-wal` and `-shm` siblings into the
   stack's `backups/` folder (the bare `.db` is stale in WAL mode). The compose edit preserves
