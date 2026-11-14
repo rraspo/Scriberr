@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 )
 
-// UploadFile uploads a file to the Scriberr server
-func UploadFile(filePath string) error {
+// UploadFile uploads one audio file as a new job. A non-empty source marks
+// where the audio came from; an empty one leaves the server default.
+func UploadFile(filePath, source string) error {
 	config := GetConfig()
 	if config.ServerURL == "" {
 		return fmt.Errorf("server URL not configured. Please run 'scriberr login' or 'scriberr install'")
@@ -39,6 +40,11 @@ func UploadFile(filePath string) error {
 	// Add title as filename
 	if err := writer.WriteField("title", filepath.Base(filePath)); err != nil {
 		return fmt.Errorf("failed to write title field: %w", err)
+	}
+	if source != "" {
+		if err := writer.WriteField("source", source); err != nil {
+			return fmt.Errorf("failed to write source field: %w", err)
+		}
 	}
 
 	err = writer.Close()

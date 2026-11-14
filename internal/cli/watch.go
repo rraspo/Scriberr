@@ -20,7 +20,10 @@ var watchCmd = &cobra.Command{
 	Run:   runWatch,
 }
 
+var watchSource string
+
 func init() {
+	watchCmd.Flags().StringVar(&watchSource, "source", "", "source recorded on each uploaded job (e.g. whatsapp); the server default when empty")
 	rootCmd.AddCommand(watchCmd)
 }
 
@@ -84,7 +87,7 @@ func watchFolder(path string) {
 						mu.Unlock()
 
 						log.Printf("Uploading %s...\n", event.Name)
-						if err := UploadFile(event.Name); err != nil {
+						if err := UploadFile(event.Name, watchSource); err != nil {
 							log.Printf("Failed to upload %s: %v\n", event.Name, err)
 						} else {
 							log.Printf("Successfully uploaded %s\n", event.Name)
