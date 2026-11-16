@@ -417,6 +417,9 @@ func (w *WhisperXAdapter) Transcribe(ctx context.Context, input interfaces.Audio
 
 	if procCtx.Execution.Mode == "remote" {
 		primary := procCtx.Execution
+		// Each tier is recorded as it starts, so a running job shows where it
+		// is (and a re-run never shows the previous run's tier).
+		recordExecutionPath(procCtx, "remote", "")
 		result, decision, err := w.transcribeRemote(ctx, primary, input, params, tempDir, procCtx, startTime)
 		if err == nil {
 			recordExecutionPath(procCtx, "remote", "")
@@ -435,6 +438,7 @@ func (w *WhisperXAdapter) Transcribe(ctx context.Context, input interfaces.Audio
 				"primary", primary.RemoteHost, "fallback", second.RemoteHost, "reason", decision.Reason)
 			secondParams := profileFallbackParameters(procCtx, params)
 			primaryReason := fmt.Sprintf("%s on %s", decision.Reason, primary.RemoteHost)
+			recordExecutionPath(procCtx, "remote-fallback", primaryReason+"; running on "+second.RemoteHost)
 			result, secondDecision, err := w.transcribeRemote(ctx, second, input, secondParams, tempDir, procCtx, startTime)
 			if err == nil {
 				recordExecutionPath(procCtx, "remote-fallback", primaryReason+"; ran on "+second.RemoteHost)
@@ -458,6 +462,9 @@ func (w *WhisperXAdapter) Transcribe(ctx context.Context, input interfaces.Audio
 		}
 	} else {
 		recordExecutionPath(procCtx, "local", "")
+		// Local always means this container's CPU, including a GPU profile
+		// forced to run here, so its GPU-sized settings are replaced.
+		params = localCPUParameters(params)
 	}
 
 	// Build WhisperX command
@@ -575,8 +582,11 @@ func localCPUParameters(params map[string]interface{}) map[string]interface{} {
 	for key, value := range params {
 		localParams[key] = value
 	}
+	// float32 with a GPU-sized batch ran a 25-minute recording out of the
+	// container's memory; int8 with a small batch fits the CPU tier.
 	localParams["device"] = "cpu"
-	localParams["compute_type"] = "float32"
+	localParams["compute_type"] = "int8"
+	localParams["batch_size"] = 4
 	return localParams
 }
 

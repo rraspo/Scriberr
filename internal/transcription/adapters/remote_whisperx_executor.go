@@ -92,7 +92,11 @@ func (e *RemoteWhisperXExecutor) Execute(ctx context.Context, jobID, audioPath s
 	}
 	defer logFile.Close()
 
-	jobDir := filepath.ToSlash(filepath.Join(e.profile.RemoteWorkDir, "jobs", jobID))
+	// Each attempt gets its own remote directory: a cancelled run of the same
+	// job can still be cleaning up on the host when the next one is submitted,
+	// and a shared directory lets that cleanup delete the new run's input.
+	runID := jobID + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	jobDir := filepath.ToSlash(filepath.Join(e.profile.RemoteWorkDir, "jobs", runID))
 	shouldCleanup := false
 	defer func() {
 		if !shouldCleanup {
@@ -109,7 +113,7 @@ func (e *RemoteWhisperXExecutor) Execute(ctx context.Context, jobID, audioPath s
 		return &RemoteFailure{Stage: "submit", Err: err}
 	}
 	defer audio.Close()
-	if err := e.transport.Exec(ctx, e.submitCommand(jobID, params), audio, logFile, logFile); err != nil {
+	if err := e.transport.Exec(ctx, e.submitCommand(runID, params), audio, logFile, logFile); err != nil {
 		failure := &RemoteFailure{Stage: "submit", Err: err}
 		shouldCleanup = !classifyRemoteFailure(failure).Fallback
 		return failure

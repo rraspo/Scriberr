@@ -29,11 +29,23 @@ import { ChatSidePanel } from "./ChatSidePanel";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const EXECUTION_PATH_LABELS: Record<ExecutionPath, string> = {
-    "remote": "Remote",
+    "remote": "GPU",
     "remote-fallback": "Fallback GPU",
-    "local": "Local",
-    "local-fallback": "Local fallback",
+    "local": "CPU",
+    "local-fallback": "CPU fallback",
 };
+
+const isCPUPath = (path: ExecutionPath) => path === "local" || path === "local-fallback";
+
+function executionPathTooltip(path: ExecutionPath, reason: string | undefined, processing: boolean): string {
+    if (processing && isCPUPath(path)) {
+        return "Slow path: transcribing on this server's CPU because no GPU host was available. Expect it to take about as long as the recording, or longer.";
+    }
+    if (reason) return reason;
+    if (path === "local-fallback") return "No GPU host was available, so it ran on this server's CPU";
+    if (path === "local") return "Ran on this server's CPU";
+    return "Ran on a GPU host";
+}
 
 // Types
 interface AudioDetailViewProps {
@@ -283,15 +295,22 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                         </Tooltip>
                                                     )}
                                                 </div>
-                                                {audioFile.execution_path && audioFile.execution_path !== "local" && (
+                                                {audioFile.execution_path && audioFile.status !== 'pending' && (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
-                                                            <span className="cursor-help rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 text-[10px] text-[var(--text-secondary)]">
-                                                                {EXECUTION_PATH_LABELS[audioFile.execution_path]}
+                                                            <span className={cn(
+                                                                "cursor-help rounded-full border px-2 py-1 text-[10px]",
+                                                                audioFile.status === 'processing' && isCPUPath(audioFile.execution_path)
+                                                                    ? "border-amber-500/40 bg-amber-500/10 text-amber-600"
+                                                                    : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-secondary)]"
+                                                            )}>
+                                                                {audioFile.status === 'processing' && isCPUPath(audioFile.execution_path)
+                                                                    ? "Slow path · CPU"
+                                                                    : EXECUTION_PATH_LABELS[audioFile.execution_path]}
                                                             </span>
                                                         </TooltipTrigger>
-                                                        <TooltipContent>
-                                                            {audioFile.execution_reason || (audioFile.execution_path === "local-fallback" ? "Remote execution was unavailable" : "Executed remotely")}
+                                                        <TooltipContent className="max-w-xs">
+                                                            {executionPathTooltip(audioFile.execution_path, audioFile.execution_reason, audioFile.status === 'processing')}
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 )}

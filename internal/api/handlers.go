@@ -1090,6 +1090,13 @@ func (h *Handler) getJobForTranscription(c *gin.Context, jobID string) (*models.
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot start transcription: job is currently processing or pending"})
 		return nil, fmt.Errorf("invalid job status")
 	}
+	// A killed job is marked failed before its worker finishes winding down;
+	// the worker then writes its own final status, which would overwrite a
+	// restart accepted in that window and leave the job silently skipped.
+	if h.taskQueue != nil && h.taskQueue.IsJobRunning(jobID) {
+		c.JSON(http.StatusConflict, gin.H{"error": "The previous run is still stopping. Try again in a few seconds."})
+		return nil, fmt.Errorf("job still stopping")
+	}
 	return job, nil
 }
 

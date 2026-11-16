@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"regexp"
 	"testing"
 	"time"
 
@@ -75,7 +76,7 @@ func TestRemoteUnavailableFallsBackToLocal(t *testing.T) {
 	}
 	adapter.localFallback = func(_ context.Context, _ interfaces.AudioInput, params map[string]interface{}, _ interfaces.ProcessingContext) (*interfaces.TranscriptResult, error) {
 		require.Equal(t, "cpu", params["device"])
-		require.Equal(t, "float32", params["compute_type"])
+		require.Equal(t, "int8", params["compute_type"])
 		return &interfaces.TranscriptResult{Text: "local transcript"}, nil
 	}
 	var path, reason string
@@ -173,10 +174,13 @@ func TestRemoteWhisperXExecutorSubmitRetrieveCleanup(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, transport.calls, 3)
-	require.Equal(t, "/srv/scriberr-work/scriberr-remote-job.sh --job-id job-123 --model large-v3 --language es --diarize --min-speakers 2 --max-speakers 6", transport.calls[0].command)
+	// Each attempt runs in its own directory: the job ID plus a per-run suffix.
+	submit := regexp.MustCompile(`^/srv/scriberr-work/scriberr-remote-job\.sh --job-id (job-123-[0-9a-z]+) --model large-v3 --language es --diarize --min-speakers 2 --max-speakers 6$`).FindStringSubmatch(transport.calls[0].command)
+	require.NotNil(t, submit, transport.calls[0].command)
+	runID := submit[1]
 	require.Equal(t, "audio-stream", transport.calls[0].stdin)
-	require.Equal(t, "tar -C /srv/scriberr-work/jobs/job-123 -cf - output", transport.calls[1].command)
-	require.Equal(t, "rm -r -- /srv/scriberr-work/jobs/job-123", transport.calls[2].command)
+	require.Equal(t, "tar -C /srv/scriberr-work/jobs/"+runID+" -cf - output", transport.calls[1].command)
+	require.Equal(t, "rm -r -- /srv/scriberr-work/jobs/"+runID, transport.calls[2].command)
 	_, err = os.Stat(filepath.Join(root, "work", "audio.json"))
 	require.NoError(t, err)
 }
@@ -194,7 +198,25 @@ func TestRemoteWhisperXExecutorCleansUpWhenRetrieveFails(t *testing.T) {
 	require.ErrorAs(t, err, &remoteErr)
 	require.Equal(t, "retrieve", remoteErr.Stage)
 	require.Len(t, transport.calls, 3)
-	require.Equal(t, "rm -r -- /srv/scriberr-work/jobs/job-456", transport.calls[2].command)
+	require.Regexp(t, `^rm -r -- /srv/scriberr-work/jobs/job-456-[0-9a-z]+$`, transport.calls[2].command)
+}
+
+// A second attempt of the same job never shares the first one's directory,
+// so a cancelled run's cleanup cannot delete the next run's input.
+func TestRemoteWhisperXExecutorGivesEachAttemptItsOwnDirectory(t *testing.T) {
+	root := t.TempDir()
+	audioPath := filepath.Join(root, "audio.wav")
+	require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0644))
+	executor := NewRemoteWhisperXExecutor(&fakeRemoteTransport{failOnCall: 2}, models.ProfileExecution{RemoteWorkDir: "/srv/scriberr-work"})
+	first := &fakeRemoteTransport{failOnCall: 2}
+	second := &fakeRemoteTransport{failOnCall: 2}
+
+	executor.transport = first
+	_ = executor.Execute(context.Background(), "job-789", audioPath, map[string]interface{}{"model": "small"}, root, filepath.Join(root, "transcription.log"))
+	executor.transport = second
+	_ = executor.Execute(context.Background(), "job-789", audioPath, map[string]interface{}{"model": "small"}, root, filepath.Join(root, "transcription.log"))
+
+	require.NotEqual(t, first.calls[2].command, second.calls[2].command)
 }
 
 func TestRemoteWhisperXSubmitCommandForwardsAllProfileParameters(t *testing.T) {

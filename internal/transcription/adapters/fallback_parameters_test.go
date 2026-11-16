@@ -23,10 +23,10 @@ func TestFallbackParametersPrefersFallbackProfile(t *testing.T) {
 	result := fallbackParameters(procCtx, jobParams)
 
 	require.Equal(t, "small", result["model"])
-	require.Equal(t, 8, result["batch_size"])
+	require.Equal(t, 4, result["batch_size"])
 	require.Equal(t, "es", result["language"])
 	require.Equal(t, "cpu", result["device"])
-	require.Equal(t, "float32", result["compute_type"])
+	require.Equal(t, "int8", result["compute_type"])
 }
 
 func TestFallbackParametersForcesCPUEvenIfFallbackProfileSaysCUDA(t *testing.T) {
@@ -46,7 +46,7 @@ func TestFallbackParametersKeepsJobParamsWhenNoFallbackProfile(t *testing.T) {
 
 	require.Equal(t, "large-v3", result["model"])
 	require.Equal(t, "cpu", result["device"])
-	require.Equal(t, "float32", result["compute_type"])
+	require.Equal(t, "int8", result["compute_type"])
 }
 
 func TestFallbackParametersCarriesHfTokenWhenFallbackProfileLacksOne(t *testing.T) {

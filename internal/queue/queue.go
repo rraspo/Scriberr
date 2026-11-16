@@ -38,15 +38,43 @@ type TaskQueue struct {
 	autoScale      bool
 	lastScaleTime  time.Time
 	jobRepo        repository.JobRepository
-	// afterCompletion runs in the worker once a job is marked completed, so
-	// follow-up GPU work such as the automatic summary never overlaps the
-	// next transcription.
+	// afterCompletion (the automatic summary) runs on its own goroutine, one
+	// job at a time in completion order. It must never run inside a worker:
+	// an LLM call can take minutes, and with a single worker every queued
+	// transcription would sit in pending behind it. The GPU host's own job
+	// gate keeps a transcription from starting while the LLM holds the card.
 	afterCompletion func(ctx context.Context, jobID string)
+	completedJobs   chan string
 }
 
 // SetAfterCompletion registers the step run after each completed job.
 func (tq *TaskQueue) SetAfterCompletion(step func(ctx context.Context, jobID string)) {
 	tq.afterCompletion = step
+}
+
+func (tq *TaskQueue) runAfterCompletionSteps() {
+	defer tq.wg.Done()
+	for {
+		select {
+		case jobID := <-tq.completedJobs:
+			tq.afterCompletion(tq.ctx, jobID)
+		case <-tq.ctx.Done():
+			return
+		}
+	}
+}
+
+// queueAfterCompletion hands a completed job to the after-completion
+// goroutine without ever blocking the worker.
+func (tq *TaskQueue) queueAfterCompletion(jobID string) {
+	if tq.afterCompletion == nil {
+		return
+	}
+	select {
+	case tq.completedJobs <- jobID:
+	default:
+		logger.Warn("After-completion backlog full; skipping the automatic step", "job_id", jobID)
+	}
 }
 
 // JobProcessor defines the interface for processing jobs
@@ -118,6 +146,7 @@ func NewTaskQueue(legacyWorkers int, processor JobProcessor, jobRepo repository.
 		autoScale:      autoScale,
 		lastScaleTime:  time.Now(),
 		jobRepo:        jobRepo,
+		completedJobs:  make(chan string, 200),
 	}
 }
 
@@ -136,6 +165,11 @@ func (tq *TaskQueue) Start() {
 	// One-time recovery: enqueue any pending jobs left from previous server run
 	// This is NOT a polling mechanism - it only runs once at startup
 	tq.recoverPendingJobs()
+
+	if tq.afterCompletion != nil {
+		tq.wg.Add(1)
+		go tq.runAfterCompletionSteps()
+	}
 
 	// Start initial workers
 	for i := 0; i < workers; i++ {
@@ -265,8 +299,8 @@ func (tq *TaskQueue) worker(id int) {
 				logger.Debug("Job processed successfully", "worker_id", id, "job_id", jobID)
 				if err := tq.updateJobStatus(jobID, models.StatusCompleted); err != nil {
 					logger.Error("Failed to update job status", "job_id", jobID, "error", err)
-				} else if tq.afterCompletion != nil {
-					tq.afterCompletion(tq.ctx, jobID)
+				} else {
+					tq.queueAfterCompletion(jobID)
 				}
 			}
 

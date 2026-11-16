@@ -150,14 +150,24 @@ without further fallback so configuration and transcription errors stay visible.
 The tiers are: the job's own remote host; then, when the `is_fallback` profile
 matching the job's language is itself `remote` on a different host, that
 second GPU host with that profile's parameters; then local CPU with the
-fallback profile's parameters forced to `cpu`/`float32`. A second GPU host's
-wrapper keeps the same contract as the first and may block until its card has
-room, so a busy shared card makes the job wait rather than fail.
+fallback profile's parameters forced to `cpu`/`int8`, batch size 4. Any local
+run, including a GPU profile forced local with `execution_mode=local`, uses
+those CPU settings: the container has no GPU, and GPU-sized settings run a long
+recording out of its memory. A second GPU host's wrapper keeps the same
+contract as the first and may block until its card has room, so a busy shared
+card makes the job wait rather than fail. Each remote attempt submits under its
+own run ID (job ID plus a per-attempt suffix), so a cancelled run's cleanup on
+the host never touches the next run's files.
 
 Each transcription job stores `execution_path` as `remote`, `remote-fallback`
 (ran on the second GPU host), `local`, or `local-fallback`, plus a short
-`execution_reason`. Both fields are returned by the job API. The job view
-displays a badge for every path except plain local execution.
+`execution_reason`, recorded as each tier starts so a running job shows where
+it is. Both fields are returned by the job API. The job view badges every path
+(GPU, Fallback GPU, CPU, CPU fallback); a job processing on a CPU tier shows an
+amber "Slow path · CPU" badge so a long run never reads as a hang.
+
+Starting a job whose previous run is still stopping returns 409; the stopping
+run would otherwise overwrite the restart's status.
 
 ## LLM and automatic summary
 
@@ -173,8 +183,11 @@ Every Ollama request sets `num_ctx` from the length of its own messages
 multiple of 4096, between 4096 and 32768) and `think: false`; Ollama
 otherwise truncates long transcripts silently.
 
-A summary template flagged `auto_generate` runs on every job right after the
-queue marks it completed, inside the same worker, so the summary never
-overlaps the next transcription on a shared GPU. The oldest flagged template
+A summary template flagged `auto_generate` runs on every job after the queue
+marks it completed, on the queue's own after-completion goroutine (one summary
+at a time, in completion order), never inside a transcription worker: an LLM
+call can take minutes, and with one worker every queued job would sit in
+pending behind it. The GPU host's job gate keeps a transcription from starting
+while the LLM holds the shared card. The oldest flagged template
 wins. The prompt is built exactly as the summary dialog builds it. A failed
 automatic summary is logged and leaves the job completed.
