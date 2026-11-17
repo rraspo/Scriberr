@@ -1,0 +1,37 @@
+name: Release QA notify
+
+# Wakes the Release QA routine when a version tag is pushed. Missing
+# webhook secrets are a skip, never a failed release.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: Notify Release QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Post tag to the Release QA webhook
+        env:
+          RELEASE_QA_WEBHOOK_URL: ${{ secrets.RELEASE_QA_WEBHOOK_URL }}
+          RELEASE_QA_WEBHOOK_AUTH: ${{ secrets.RELEASE_QA_WEBHOOK_AUTH }}
+        run: |
+          if [ -z "$RELEASE_QA_WEBHOOK_URL" ] || [ -z "$RELEASE_QA_WEBHOOK_AUTH" ]; then
+            echo "Release QA webhook secrets are not set; skipping notify."
+            exit 0
+          fi
+          payload=$(printf '{"repo":"%s","tag":"%s","sha":"%s"}' \
+            "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" "$GITHUB_SHA")
+          curl --fail --retry 3 --connect-timeout 10 --max-time 30 \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: $RELEASE_QA_WEBHOOK_AUTH" \
+            -d "$payload" \
+            "$RELEASE_QA_WEBHOOK_URL"
