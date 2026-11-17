@@ -29,6 +29,11 @@ func newQueueWithJobs(t *testing.T, jobIDs ...string) (*TaskQueue, repository.Jo
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
+	// A shared-cache memory DB lives until its last connection closes; a
+	// repeat run (-count>1) would otherwise reattach to this run's rows.
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	require.NoError(t, db.AutoMigrate(&models.TranscriptionJob{}))
 	jobs := repository.NewJobRepository(db)
 	for _, id := range jobIDs {
