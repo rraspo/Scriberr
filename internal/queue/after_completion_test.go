@@ -49,11 +49,11 @@ func waitForStatus(t *testing.T, jobs repository.JobRepository, jobID string, wa
 // must not hold the only worker: the next queued job still gets transcribed.
 func TestSlowAfterCompletionDoesNotBlockTheNextJob(t *testing.T) {
 	queue, jobs := newQueueWithJobs(t, "first", "second")
-	release := make(chan struct{})
-	defer close(release)
+	// Blocks until the queue stops, as a real LLM call does until Stop
+	// cancels its context.
 	queue.SetAfterCompletion(func(ctx context.Context, jobID string) {
 		if jobID == "first" {
-			<-release
+			<-ctx.Done()
 		}
 	})
 	queue.Start()
