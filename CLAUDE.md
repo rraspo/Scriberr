@@ -169,6 +169,22 @@ amber "Slow path · CPU" badge so a long run never reads as a hang.
 Starting a job whose previous run is still stopping returns 409; the stopping
 run would otherwise overwrite the restart's status.
 
+## YouTube links
+
+`POST /api/v1/transcription/youtube` accepts only http(s) links on
+`youtube.com`, `www.`/`m.`/`music.youtube.com` or `youtu.be`. One yt-dlp
+metadata call (`--print title --print channel`) runs before the audio
+download. The job is stored with `source` `youtube`, `source_url` (the
+trimmed link), `source_channel` (nil when yt-dlp reports `NA`) and the video
+title unless a custom title is given. It is queued straight away with the
+user's default profile, else the system default, else the first profile. When
+no profile exists or enqueueing fails, the job stays `uploaded` with the
+reason in `error_message`, and the response is still 200. A failed download
+creates no job, leaves no file, and returns `{error, code}` with code
+`invalid_url` (400), `video_unavailable` (422), `youtube_blocked` (502) or
+`download_failed` (502). The recording page links back to `source_url` with
+the channel name. The download runs inside the HTTP request.
+
 ## LLM and automatic summary
 
 `OLLAMA_ENDPOINTS` (`url=model,url=model`, in order of preference), when set,

@@ -57,6 +57,8 @@ export interface AudioFile {
     created_at: string;
     audio_path: string;
     diarization?: boolean;
+    source_url?: string;
+    source_channel?: string;
     execution_path?: ExecutionPath;
     execution_reason?: string;
     is_multi_track?: boolean;

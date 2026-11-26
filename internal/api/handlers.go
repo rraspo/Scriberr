@@ -2668,6 +2668,7 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 		return
 	}
 
+	req.URL = strings.TrimSpace(req.URL)
 	if !isYouTubeURL(req.URL) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "That is not a YouTube link. Paste a youtube.com or youtu.be URL.", "code": "invalid_url"})
 		return
@@ -2694,30 +2695,35 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 	}
 
 	// Get video title if not provided
+	// One metadata call yields the video title and the channel.
 	var title string
+	var channel *string
+	metadataStart := time.Now()
+	metadataCmd := exec.Command("yt-dlp", "--skip-download", "--no-playlist", "--print", "title", "--print", "channel", req.URL)
+	var metadataOut bytes.Buffer
+	var metadataStderr bytes.Buffer
+	metadataCmd.Stdout = &metadataOut
+	metadataCmd.Stderr = &metadataStderr
+	if err := metadataCmd.Run(); err != nil {
+		logger.Warn("Failed to get YouTube metadata", "url", req.URL, "error", err.Error(), "stderr", metadataStderr.String(), "duration", time.Since(metadataStart))
+		status, code, message := classifyYouTubeFailure(metadataStderr.String())
+		if code != "download_failed" {
+			c.JSON(status, gin.H{"error": message, "code": code})
+			return
+		}
+		title = "YouTube Audio"
+	} else {
+		lines := strings.Split(strings.TrimSpace(metadataOut.String()), "\n")
+		title = strings.TrimSpace(lines[0])
+		if len(lines) > 1 {
+			if name := strings.TrimSpace(lines[1]); name != "" && name != "NA" {
+				channel = &name
+			}
+		}
+		logger.Info("YouTube metadata retrieved", "title", title, "duration", time.Since(metadataStart))
+	}
 	if req.Title != nil && *req.Title != "" {
 		title = *req.Title
-	} else {
-		// Get title first using standalone yt-dlp
-		titleStart := time.Now()
-		cmd := exec.Command("yt-dlp", "--get-title", req.URL)
-		var out bytes.Buffer
-		var titleStderr bytes.Buffer
-		cmd.Stdout = &out
-		cmd.Stderr = &titleStderr
-		err := cmd.Run()
-		if err != nil {
-			logger.Warn("Failed to get YouTube title", "url", req.URL, "error", err.Error(), "stderr", titleStderr.String(), "duration", time.Since(titleStart))
-			status, code, message := classifyYouTubeFailure(titleStderr.String())
-			if code != "download_failed" {
-				c.JSON(status, gin.H{"error": message, "code": code})
-				return
-			}
-			title = "YouTube Audio"
-		} else {
-			title = strings.TrimSpace(out.String())
-			logger.Info("YouTube title retrieved", "title", title, "duration", time.Since(titleStart))
-		}
 	}
 
 	// Download audio using yt-dlp in Python environment
@@ -2778,10 +2784,12 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 
 	// Create transcription record; a downloaded video is always queued.
 	job := models.TranscriptionJob{
-		ID:        jobID,
-		AudioPath: actualFilePath,
-		Status:    models.StatusUploaded,
-		Source:    sourceYouTube,
+		ID:            jobID,
+		AudioPath:     actualFilePath,
+		Status:        models.StatusUploaded,
+		Source:        sourceYouTube,
+		SourceURL:     &req.URL,
+		SourceChannel: channel,
 	}
 	if title != "" {
 		job.Title = &title

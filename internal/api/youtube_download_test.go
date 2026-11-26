@@ -23,8 +23,10 @@ import (
 )
 
 // fakeYtDlpScript stands in for the yt-dlp binary. FAKE_YTDLP_MODE selects
-// the outcome; "ok" prints the title for --get-title and writes an mp3 at the
-// --output template for a download.
+// the outcome. A metadata call (--print title --print channel) prints the
+// title and channel on two lines ("NA" for the channel in mode "nochannel",
+// as yt-dlp does for a missing field); a download writes an mp3 at the
+// --output template.
 const fakeYtDlpScript = `#!/bin/sh
 mode="${FAKE_YTDLP_MODE:-ok}"
 case "$mode" in
@@ -41,8 +43,9 @@ esac
 output=""
 previous=""
 for argument in "$@"; do
-  if [ "$argument" = "--get-title" ]; then
+  if [ "$argument" = "--print" ]; then
     echo "Fake Video Title"
+    if [ "$mode" = "nochannel" ]; then echo "NA"; else echo "Fake Channel"; fi
     exit 0
   fi
   if [ "$previous" = "--output" ] || [ "$previous" = "-o" ]; then
@@ -162,6 +165,31 @@ func TestYouTubeDownloadQueuesJobWithDefaultProfileAndYouTubeSource(t *testing.T
 	require.True(t, stored.Diarization)
 	require.True(t, strings.HasPrefix(stored.AudioPath, uploadDir), stored.AudioPath)
 	require.FileExists(t, stored.AudioPath)
+	require.NotNil(t, stored.SourceURL)
+	require.Equal(t, "https://www.youtube.com/watch?v=abc123def45", *stored.SourceURL)
+	require.NotNil(t, stored.SourceChannel)
+	require.Equal(t, "Fake Channel", *stored.SourceChannel)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload))
+	require.Equal(t, "https://www.youtube.com/watch?v=abc123def45", payload["source_url"])
+	require.Equal(t, "Fake Channel", payload["source_channel"])
+}
+
+func TestYouTubeDownloadStoresTrimmedURLAndSkipsMissingChannel(t *testing.T) {
+	installFakeYtDlp(t, "nochannel")
+	handler, db, _ := newYouTubeTestHandler(t)
+	createDefaultYouTubeProfile(t, db)
+
+	response := performYouTubeRequest(t, handler, map[string]any{"url": "  https://youtu.be/abc123def45  "})
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+
+	var stored models.TranscriptionJob
+	require.NoError(t, db.First(&stored).Error)
+	require.NotNil(t, stored.SourceURL)
+	require.Equal(t, "https://youtu.be/abc123def45", *stored.SourceURL)
+	require.Nil(t, stored.SourceChannel, "yt-dlp's NA placeholder is not a channel name")
+	require.Equal(t, "Fake Video Title", *stored.Title)
 }
 
 func TestYouTubeDownloadKeepsCustomTitle(t *testing.T) {

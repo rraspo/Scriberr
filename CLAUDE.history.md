@@ -1,5 +1,7 @@
 # CLAUDE.history.md — Scriberr fork
 
+- 2026-11-26 — YouTube links now queue immediately with source `youtube`, keep the source URL and channel for traceability (guide videos), and return classified errors. Before this, they landed `uploaded` with source `manual`, were never queued, and surfaced raw yt-dlp errors. Owner ask relayed from the vault session.
+
 - 2026-11-16 — Stuck-job fixes after a 25-minute recording sat in pending: the automatic summary moved off the single queue worker (argus Ollama had lost its GPU and took 5m45s on CPU, blocking every queued job); a restart during a kill now answers 409 instead of being silently overwritten; remote attempts get unique run directories (a cancelled run's cleanup deleted the next run's input on argus); the CPU tier uses int8 / batch 4 for every local run (float32 with GPU batch sizes was OOM-killed, exit 137); tiers are recorded as they start and CPU runs show a "Slow path" badge.
 
 - 2026-11-13 — `scriberr watch` gained `--source`; the WhatsApp inbox watcher now marks its jobs `source=whatsapp` (they had been `manual`), so the meetings import can skip client voice notes without matching titles.
