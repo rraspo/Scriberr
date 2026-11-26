@@ -185,10 +185,18 @@ export function useYouTubeDownload() {
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || "Failed to download YouTube audio");
+                let message = `Failed to download YouTube audio (HTTP ${response.status})`;
+                try {
+                    const errorData = await response.json();
+                    if (errorData && typeof errorData.error === "string" && errorData.error) {
+                        message = errorData.error;
+                    }
+                } catch {
+                    // A proxy may answer with non-JSON; keep the generic message.
+                }
+                throw new Error(message);
             }
-            return response.json();
+            return (await response.json()) as { id: string; title?: string | null; status: string; error_message?: string | null };
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['audioFiles'] });

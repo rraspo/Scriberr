@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Youtube, Download, AlertCircle, CheckCircle } from "lucide-react";
+import { Youtube, Download, AlertCircle, CheckCircle, AlertTriangle } from "lucide-react";
 import { useYouTubeDownload } from "@/features/transcription/hooks/useAudioFiles";
 
 interface YouTubeDownloadDialogProps {
@@ -28,6 +28,8 @@ export function YouTubeDownloadDialog({
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [notQueued, setNotQueued] = useState<{ title: string; reason: string } | null>(null);
+  const [queuedTitle, setQueuedTitle] = useState("");
 
   const validateYouTubeUrl = (url: string): boolean => {
     return url.includes('youtube.com') || url.includes('youtu.be');
@@ -49,12 +51,22 @@ export function YouTubeDownloadDialog({
     setError(null);
 
     try {
-      await downloadYouTube({ url, title });
-      setSuccess(true);
-      setTimeout(() => {
-        handleClose();
+      const job = await downloadYouTube({ url, title });
+      const jobTitle = job.title || "The video";
+      if (job.status === "pending") {
+        setQueuedTitle(jobTitle);
+        setSuccess(true);
+        setTimeout(() => {
+          handleClose();
+          onDownloadComplete?.();
+        }, 2000);
+      } else {
+        setNotQueued({
+          title: jobTitle,
+          reason: job.error_message || "It was downloaded but could not be queued.",
+        });
         onDownloadComplete?.();
-      }, 2000);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Network error occurred. Please try again.");
     }
@@ -64,6 +76,8 @@ export function YouTubeDownloadDialog({
     setTitle("");
     setError(null);
     setSuccess(false);
+    setNotQueued(null);
+    setQueuedTitle("");
     onClose();
   };
 
@@ -88,17 +102,39 @@ export function YouTubeDownloadDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {success ? (
+        {notQueued ? (
+          <div className="space-y-4 py-4">
+            <div className="flex items-center justify-center">
+              <AlertTriangle className="h-12 w-12 text-[var(--warning)]" />
+            </div>
+            <div className="text-center">
+              <h3 className="font-medium text-[var(--text-primary)] mb-2">
+                Downloaded, not queued
+              </h3>
+              <p className="text-sm text-[var(--text-secondary)]">
+                {notQueued.title} was downloaded, but it is not queued for transcription. {notQueued.reason}
+              </p>
+              <p className="text-sm text-[var(--text-secondary)] mt-2">
+                You can start it manually from the job list.
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <Button type="button" onClick={handleClose}>
+                Close
+              </Button>
+            </div>
+          </div>
+        ) : success ? (
           <div className="space-y-4 py-4">
             <div className="flex items-center justify-center">
               <CheckCircle className="h-12 w-12 text-[var(--success)]" />
             </div>
             <div className="text-center">
               <h3 className="font-medium text-[var(--text-primary)] mb-2">
-                Download Complete!
+                Queued for transcription
               </h3>
               <p className="text-sm text-[var(--text-secondary)]">
-                The audio has been downloaded and added to your audio files.
+                {queuedTitle} was downloaded and is queued for transcription.
               </p>
             </div>
           </div>
@@ -169,12 +205,12 @@ export function YouTubeDownloadDialog({
                 {isDownloading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                    Downloading...
+                    Downloading and queueing...
                   </>
                 ) : (
                   <>
                     <Download className="h-4 w-4 mr-2" />
-                    Download
+                    Download and queue
                   </>
                 )}
               </Button>

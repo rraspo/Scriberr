@@ -2,12 +2,14 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -344,25 +346,7 @@ func (h *Handler) UploadAudio(c *gin.Context) {
 		// Use UserService to get user
 		user, err := h.userService.GetUser(c.Request.Context(), userID.(uint))
 		if err == nil && user.AutoTranscriptionEnabled {
-			// Get user's default profile or use system default
-			var profile *models.TranscriptionProfile
-
-			if user.DefaultProfileID != nil {
-				profile, _ = h.profileRepo.FindByID(c.Request.Context(), *user.DefaultProfileID)
-			}
-
-			// If no user default or user default not found, try to find a system default
-			if profile == nil {
-				profile, _ = h.profileRepo.FindDefault(c.Request.Context())
-			}
-
-			// If still no profile found, use the first available profile
-			if profile == nil {
-				profiles, _, _ := h.profileRepo.List(c.Request.Context(), 0, 1)
-				if len(profiles) > 0 {
-					profile = &profiles[0]
-				}
-			}
+			profile := h.profileForQueueing(c.Request.Context(), user)
 
 			// If we found a profile, update the job and queue it
 			if profile != nil {
@@ -2680,13 +2664,12 @@ func (h *Handler) GetQuickTranscriptionStatus(c *gin.Context) {
 func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 	var req YouTubeDownloadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_url"})
 		return
 	}
 
-	// Validate YouTube URL
-	if !strings.Contains(req.URL, "youtube.com") && !strings.Contains(req.URL, "youtu.be") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid YouTube URL"})
+	if !isYouTubeURL(req.URL) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "That is not a YouTube link. Paste a youtube.com or youtu.be URL.", "code": "invalid_url"})
 		return
 	}
 
@@ -2702,6 +2685,14 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 	filename := fmt.Sprintf("%s.%%(ext)s", jobID)
 	filePath := filepath.Join(uploadDir, filename)
 
+	// Remove any partial download for this job on every failure path.
+	removePartials := func() {
+		partials, _ := filepath.Glob(filepath.Join(uploadDir, jobID+".*"))
+		for _, partial := range partials {
+			_ = os.Remove(partial)
+		}
+	}
+
 	// Get video title if not provided
 	var title string
 	if req.Title != nil && *req.Title != "" {
@@ -2711,11 +2702,18 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 		titleStart := time.Now()
 		cmd := exec.Command("yt-dlp", "--get-title", req.URL)
 		var out bytes.Buffer
+		var titleStderr bytes.Buffer
 		cmd.Stdout = &out
+		cmd.Stderr = &titleStderr
 		err := cmd.Run()
 		if err != nil {
+			logger.Warn("Failed to get YouTube title", "url", req.URL, "error", err.Error(), "stderr", titleStderr.String(), "duration", time.Since(titleStart))
+			status, code, message := classifyYouTubeFailure(titleStderr.String())
+			if code != "download_failed" {
+				c.JSON(status, gin.H{"error": message, "code": code})
+				return
+			}
 			title = "YouTube Audio"
-			logger.Warn("Failed to get YouTube title", "url", req.URL, "error", err.Error(), "duration", time.Since(titleStart))
 		} else {
 			title = strings.TrimSpace(out.String())
 			logger.Info("YouTube title retrieved", "title", title, "duration", time.Since(titleStart))
@@ -2749,10 +2747,9 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 			"stderr", stderrOutput,
 			"duration", time.Since(downloadStart))
 
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   fmt.Sprintf("Failed to download YouTube audio: %v", err),
-			"details": stderrOutput,
-		})
+		removePartials()
+		status, code, message := classifyYouTubeFailure(stderrOutput)
+		c.JSON(status, gin.H{"error": message, "code": code})
 		return
 	}
 
@@ -2760,7 +2757,8 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 	pattern := fmt.Sprintf("%s.*", jobID)
 	matches, err := filepath.Glob(filepath.Join(uploadDir, pattern))
 	if err != nil || len(matches) == 0 {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Downloaded file not found"})
+		removePartials()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Downloaded file not found", "code": "download_failed"})
 		return
 	}
 
@@ -2778,27 +2776,104 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 			"duration", time.Since(downloadStart))
 	}
 
-	// Create transcription record
+	// Create transcription record; a downloaded video is always queued.
 	job := models.TranscriptionJob{
 		ID:        jobID,
 		AudioPath: actualFilePath,
 		Status:    models.StatusUploaded,
+		Source:    sourceYouTube,
 	}
-
-	// Set title
 	if title != "" {
 		job.Title = &title
 	}
 
-	// Save to database
+	var user *models.User
+	if userID, exists := c.Get("user_id"); exists && h.userService != nil {
+		if id, ok := userID.(uint); ok {
+			if foundUser, userErr := h.userService.GetUser(c.Request.Context(), id); userErr == nil {
+				user = foundUser
+			}
+		}
+	}
+
+	profile := h.profileForQueueing(c.Request.Context(), user)
+	if profile != nil {
+		job.Parameters = profile.Parameters
+		job.Execution = profileExecutionSnapshot(profile)
+		job.Diarization = profile.Parameters.Diarize
+		job.Status = models.StatusPending
+	} else {
+		reason := "Downloaded, but no transcription profile exists to queue it with"
+		job.ErrorMessage = &reason
+	}
+
 	if err := h.jobRepo.Create(c.Request.Context(), &job); err != nil {
-		// Clean up downloaded file on database error
-		os.Remove(actualFilePath)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save transcription record"})
+		removePartials()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save transcription record", "code": "download_failed"})
 		return
 	}
 
+	if profile != nil {
+		if err := h.taskQueue.EnqueueJob(jobID); err != nil {
+			logger.Warn("Failed to queue YouTube job", "job_id", jobID, "error", err.Error())
+			reason := fmt.Sprintf("Downloaded, but could not be queued: %v", err)
+			job.Status = models.StatusUploaded
+			job.ErrorMessage = &reason
+			_ = h.jobRepo.Update(c.Request.Context(), &job)
+		}
+	}
+
 	c.JSON(http.StatusOK, job)
+}
+
+// profileForQueueing picks the profile a freshly stored job is queued with:
+// the user's default, else the system default, else the first profile. user
+// may be nil. It returns nil when no profile exists.
+func (h *Handler) profileForQueueing(ctx context.Context, user *models.User) *models.TranscriptionProfile {
+	var profile *models.TranscriptionProfile
+	if user != nil && user.DefaultProfileID != nil {
+		profile, _ = h.profileRepo.FindByID(ctx, *user.DefaultProfileID)
+	}
+	if profile == nil {
+		profile, _ = h.profileRepo.FindDefault(ctx)
+	}
+	if profile == nil {
+		profiles, _, _ := h.profileRepo.List(ctx, 0, 1)
+		if len(profiles) > 0 {
+			profile = &profiles[0]
+		}
+	}
+	return profile
+}
+
+// isYouTubeURL accepts only http(s) links whose host is a YouTube host.
+func isYouTubeURL(rawURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return false
+	}
+	switch strings.ToLower(parsed.Hostname()) {
+	case "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be":
+		return true
+	}
+	return false
+}
+
+// classifyYouTubeFailure maps yt-dlp stderr to an HTTP status, a stable code
+// and a human message.
+func classifyYouTubeFailure(stderr string) (int, string, string) {
+	lowered := strings.ToLower(stderr)
+	for _, marker := range []string{"private", "unavailable", "removed", "members-only", "members only", "age-restricted", "confirm your age"} {
+		if strings.Contains(lowered, marker) {
+			return http.StatusUnprocessableEntity, "video_unavailable", "This video is unavailable: it may be private, removed, members-only or age-restricted."
+		}
+	}
+	for _, marker := range []string{"sign in to confirm", "not a bot", "http error 403", "http error 429", "po token"} {
+		if strings.Contains(lowered, marker) {
+			return http.StatusBadGateway, "youtube_blocked", "YouTube blocked the download request. Try again later."
+		}
+	}
+	return http.StatusBadGateway, "download_failed", "The YouTube download failed. Check the link and try again."
 }
 
 // @Summary Get user's default profile
