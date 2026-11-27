@@ -183,7 +183,10 @@ reason in `error_message`, and the response is still 200. A failed download
 creates no job, leaves no file, and returns `{error, code}` with code
 `invalid_url` (400), `video_unavailable` (422), `youtube_blocked` (502) or
 `download_failed` (502). The recording page links back to `source_url` with
-the channel name. The download runs inside the HTTP request.
+the channel name. The download runs inside the HTTP request (a 40-minute
+video takes about 30 seconds); once it finishes, the job is saved even if the
+browser has gone away. yt-dlp is pinned in the Dockerfile
+(`YT_DLP_VERSION`); bump it when YouTube starts answering 403.
 
 ## LLM and automatic summary
 

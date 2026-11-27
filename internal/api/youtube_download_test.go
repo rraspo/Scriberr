@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	stdcontext "context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -190,6 +191,27 @@ func TestYouTubeDownloadStoresTrimmedURLAndSkipsMissingChannel(t *testing.T) {
 	require.Equal(t, "https://youtu.be/abc123def45", *stored.SourceURL)
 	require.Nil(t, stored.SourceChannel, "yt-dlp's NA placeholder is not a channel name")
 	require.Equal(t, "Fake Video Title", *stored.Title)
+}
+
+func TestYouTubeDownloadSurvivesClientDisconnect(t *testing.T) {
+	installFakeYtDlp(t, "ok")
+	handler, db, _ := newYouTubeTestHandler(t)
+	createDefaultYouTubeProfile(t, db)
+
+	encoded, err := json.Marshal(map[string]any{"url": "https://www.youtube.com/watch?v=abc123def45"})
+	require.NoError(t, err)
+	cancelled, cancel := stdcontext.WithCancel(stdcontext.Background())
+	cancel()
+	recorder := httptest.NewRecorder()
+	ginContext, _ := gin.CreateTestContext(recorder)
+	ginContext.Request = httptest.NewRequest(http.MethodPost, "/api/v1/transcription/youtube", bytes.NewReader(encoded)).WithContext(cancelled)
+	ginContext.Request.Header.Set("Content-Type", "application/json")
+	handler.DownloadFromYouTube(ginContext)
+
+	var stored models.TranscriptionJob
+	require.NoError(t, db.First(&stored).Error, "a finished download must be kept when the browser goes away")
+	require.Equal(t, models.StatusPending, stored.Status)
+	require.FileExists(t, stored.AudioPath)
 }
 
 func TestYouTubeDownloadKeepsCustomTitle(t *testing.T) {

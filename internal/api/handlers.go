@@ -2795,16 +2795,21 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 		job.Title = &title
 	}
 
+	// The download is done; a browser that gave up waiting (closed tab, locked
+	// phone) must not throw it away, so the job is saved without the request's
+	// cancellation.
+	saveContext := context.WithoutCancel(c.Request.Context())
+
 	var user *models.User
 	if userID, exists := c.Get("user_id"); exists && h.userService != nil {
 		if id, ok := userID.(uint); ok {
-			if foundUser, userErr := h.userService.GetUser(c.Request.Context(), id); userErr == nil {
+			if foundUser, userErr := h.userService.GetUser(saveContext, id); userErr == nil {
 				user = foundUser
 			}
 		}
 	}
 
-	profile := h.profileForQueueing(c.Request.Context(), user)
+	profile := h.profileForQueueing(saveContext, user)
 	if profile != nil {
 		job.Parameters = profile.Parameters
 		job.Execution = profileExecutionSnapshot(profile)
@@ -2815,7 +2820,7 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 		job.ErrorMessage = &reason
 	}
 
-	if err := h.jobRepo.Create(c.Request.Context(), &job); err != nil {
+	if err := h.jobRepo.Create(saveContext, &job); err != nil {
 		removePartials()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save transcription record", "code": "download_failed"})
 		return
@@ -2827,7 +2832,7 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 			reason := fmt.Sprintf("Downloaded, but could not be queued: %v", err)
 			job.Status = models.StatusUploaded
 			job.ErrorMessage = &reason
-			_ = h.jobRepo.Update(c.Request.Context(), &job)
+			_ = h.jobRepo.Update(saveContext, &job)
 		}
 	}
 
