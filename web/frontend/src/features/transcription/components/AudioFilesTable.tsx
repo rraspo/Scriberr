@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useCallback, memo, useRef } from "react";
+import { sourceAppearance } from "@/features/transcription/sourceAppearance";
 import { useInView } from "react-intersection-observer";
 import {
 	Loader2,
 	Trash2,
 	StopCircle,
 	Music,
-	FileAudio,
 	Wand2,
 	Check,
 	AlertCircle,
@@ -42,7 +42,8 @@ import { buildStartTranscriptionUrl } from "@/lib/remoteExecution";
 
 // The 48px tile before a row's title: the saved thumbnail when the job has
 // one, otherwise (or when the image fails to load) the audio icon.
-function JobTile({ jobId, hasThumbnail }: { jobId: string; hasThumbnail: boolean }) {
+function JobTile({ jobId, hasThumbnail, kind }: { jobId: string; hasThumbnail: boolean; kind?: string }) {
+	const { icon: KindIcon, tintClasses } = sourceAppearance(kind);
 	const [imageFailed, setImageFailed] = useState(false);
 
 	if (hasThumbnail && !imageFailed) {
@@ -57,8 +58,8 @@ function JobTile({ jobId, hasThumbnail }: { jobId: string; hasThumbnail: boolean
 		);
 	}
 	return (
-		<div className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-[#FFFAF0] text-[#FF6D20] transition-opacity duration-200">
-			<FileAudio className="h-6 w-6" strokeWidth={2} />
+		<div className={cn("flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl transition-opacity duration-200", tintClasses)}>
+			<KindIcon className="h-6 w-6" strokeWidth={2} />
 		</div>
 	);
 }
@@ -834,15 +835,21 @@ export const AudioFilesTable = memo(function AudioFilesTable({
 								>
 									<div className="flex items-center gap-4 min-w-0 transition-[padding] duration-200">
 										{/* Icon (Tinted Pastel Square) - Lighter Shade */}
-										<JobTile jobId={file.id} hasThumbnail={Boolean(file.thumbnail_path)} />
+										<JobTile jobId={file.id} hasThumbnail={Boolean(file.thumbnail_path)} kind={file.source_kind} />
 
 										{/* Text */}
 										<div className="min-w-0">
 											<h4 className="font-normal text-gray-900 dark:text-gray-100 truncate text-lg leading-tight group-hover:text-[#FF6D20] transition-colors">
 												{file.title || getFileName(file.audio_path)}
 											</h4>
-											<div className="flex items-center gap-1.5 mt-1 text-sm text-gray-500">
-												{formatDate(file.created_at)}
+											<div className="flex items-center gap-1.5 mt-1 text-sm text-gray-500 min-w-0">
+												{file.source_label && (
+													<>
+														<span className="truncate min-w-0">{file.source_label}</span>
+														<span aria-hidden="true">·</span>
+													</>
+												)}
+												<span className="shrink-0">{formatDate(file.created_at)}</span>
 											</div>
 										</div>
 									</div>

@@ -24,6 +24,8 @@ type TranscriptionJob struct {
 	SourceChannel         *string        `json:"source_channel,omitempty" gorm:"type:text"`
 	ProfileName           *string        `json:"profile_name,omitempty" gorm:"type:text"`
 	ThumbnailPath         *string        `json:"thumbnail_path,omitempty" gorm:"type:text"`
+	SourceKind            string         `json:"source_kind,omitempty" gorm:"-"`
+	SourceLabel           string         `json:"source_label,omitempty" gorm:"-"`
 	IsMultiTrack          bool           `json:"is_multi_track" gorm:"type:boolean;default:false"`
 	AupFilePath           *string        `json:"aup_file_path,omitempty" gorm:"type:text"`
 	MultiTrackFolder      *string        `json:"multi_track_folder,omitempty" gorm:"type:text"`

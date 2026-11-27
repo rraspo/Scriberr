@@ -941,6 +941,10 @@ func (h *Handler) ListTranscriptionJobs(c *gin.Context) {
 		return
 	}
 
+	for index := range jobs {
+		applySourceDescription(&jobs[index])
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"jobs": jobs,
 		"pagination": gin.H{
@@ -971,6 +975,7 @@ func (h *Handler) GetTranscriptionJob(c *gin.Context) {
 		return
 	}
 
+	applySourceDescription(job)
 	c.JSON(http.StatusOK, job)
 }
 
@@ -2830,6 +2835,7 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 		_ = h.jobRepo.Update(ctx, &job)
 	}
 
+	applySourceDescription(&job)
 	c.JSON(http.StatusOK, job)
 }
 

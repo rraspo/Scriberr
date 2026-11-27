@@ -205,6 +205,21 @@ video takes about 30 seconds); once it finishes, the job is saved even if the
 browser has gone away. yt-dlp is pinned in the Dockerfile
 (`YT_DLP_VERSION`); bump it when YouTube starts answering 403.
 
+## Job source description
+
+The list and single-job APIs (and the YouTube download response) add
+non-persisted `source_kind` and `source_label`. `describeSource`
+(`internal/api/source_description.go`) derives them only from data the job
+already carries: `source`, title patterns (Android call recordings `Call
+<contact>_YYMMDD_HHMMSS`, phone voice-recorder `.m4a` files `<name>
+YYMMDD_HHMMSS`, `WhatsApp Ptt`/`WhatsApp Audio`, `Omi `), the audio extension,
+`source_channel` and `is_multi_track`. Kinds are youtube, plaud, whatsapp, call,
+voice_memo, omi, multitrack and upload. `sourceAppearance.ts` maps each kind to
+a lucide icon and tint. The list tile shows the saved YouTube thumbnail, else
+the kind's icon, with `<source_label> · <date>` under the title, and the
+recording page opens with the same source header. Plaud has a single tile, with
+no split between calls and recordings.
+
 ## LLM and automatic summary
 
 `OLLAMA_ENDPOINTS` (`url=model,url=model`, in order of preference), when set,

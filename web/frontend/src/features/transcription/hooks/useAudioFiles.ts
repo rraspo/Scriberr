@@ -12,6 +12,8 @@ export interface AudioFile {
     error_message?: string;
     thumbnail_path?: string;
     profile_name?: string;
+    source_kind?: string;
+    source_label?: string;
     source_url?: string;
     source_channel?: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

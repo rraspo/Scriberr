@@ -60,6 +60,8 @@ export interface AudioFile {
     source_url?: string;
     source_channel?: string;
     profile_name?: string;
+    source_kind?: string;
+    source_label?: string;
     execution_path?: ExecutionPath;
     execution_reason?: string;
     is_multi_track?: boolean;
