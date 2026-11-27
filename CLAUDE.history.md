@@ -1,5 +1,7 @@
 # CLAUDE.history.md — Scriberr fork
 
+- 2026-11-26 — WhatsApp rows dropped the "Voice note"/"Audio" split, which was guessed from the .ogg extension. Owner: no sender/chat capture, since he forwards audios to Voicenotes. Video uploads now get `source=video`; older ones stay `manual`.
+
 - 2026-11-26 — YouTube jobs no longer use the default profile ("4090 Spanish" transcribed an English video into Spanish). A paste preview now shows the video's metadata and pre-selects the profile from YouTube's language. Auto-detect was rejected because it had misread an English talk as Welsh. Thumbnails are saved with the job and shown in the list.
 
 - 2026-11-26 — YouTube links now queue immediately with source `youtube`, keep the source URL and channel for traceability (guide videos), and return classified errors. Before this, they landed `uploaded` with source `manual`, were never queued, and surfaced raw yt-dlp errors. Owner ask relayed from the vault session.

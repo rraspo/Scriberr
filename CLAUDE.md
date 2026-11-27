@@ -214,7 +214,10 @@ already carries: `source`, title patterns (Android call recordings `Call
 <contact>_YYMMDD_HHMMSS`, phone voice-recorder `.m4a` files `<name>
 YYMMDD_HHMMSS`, `WhatsApp Ptt`/`WhatsApp Audio`, `Omi `), the audio extension,
 `source_channel` and `is_multi_track`. Kinds are youtube, plaud, whatsapp, call,
-voice_memo, omi, multitrack and upload. `sourceAppearance.ts` maps each kind to
+voice_memo, omi, video, multitrack and upload. WhatsApp keeps one plain label:
+a forwarded audio cannot be told apart from a voice note, and the sender is not
+captured because forwards would make it wrong. Video uploads are stored with
+`source` `video` unless the form names a source. `sourceAppearance.ts` maps each kind to
 a lucide icon and tint. The list tile shows the saved YouTube thumbnail, else
 the kind's icon, with `<source_label> · <date>` under the title, and the
 recording page opens with the same source header. Plaud has a single tile, with

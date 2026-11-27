@@ -7,6 +7,7 @@ import {
     MonitorPlay,
     PhoneCall,
     Smartphone,
+    Video,
     type LucideIcon,
 } from "lucide-react";
 
@@ -23,6 +24,7 @@ const appearances: Record<string, SourceAppearance> = {
     whatsapp: { icon: MessageCircle, tintClasses: "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400" },
     omi: { icon: CircleDot, tintClasses: "bg-teal-50 text-teal-600 dark:bg-teal-950 dark:text-teal-400" },
     multitrack: { icon: Layers, tintClasses: "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400" },
+    video: { icon: Video, tintClasses: "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400" },
     upload: { icon: FileAudio, tintClasses: "bg-[#FFFAF0] text-[#FF6D20]" },
 };
 

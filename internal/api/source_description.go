@@ -36,10 +36,9 @@ func describeSource(job models.TranscriptionJob) SourceDescription {
 	case job.Source == "plaud":
 		return SourceDescription{"plaud", "Plaud"}
 	case job.Source == "whatsapp" || strings.HasPrefix(title, "WhatsApp Ptt") || strings.HasPrefix(title, "WhatsApp Audio"):
-		if extension == ".ogg" || strings.HasPrefix(title, "WhatsApp Ptt") {
-			return SourceDescription{"whatsapp", "WhatsApp · Voice note"}
-		}
-		return SourceDescription{"whatsapp", "WhatsApp · Audio"}
+		return SourceDescription{"whatsapp", "WhatsApp"}
+	case job.Source == sourceVideo:
+		return SourceDescription{"video", "Video"}
 	case job.Source == "omi" || strings.HasPrefix(title, "Omi "):
 		return SourceDescription{"omi", "Omi"}
 	case job.IsMultiTrack:

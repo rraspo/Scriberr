@@ -8,4 +8,5 @@ const (
 	paramVideo    = "video"
 	paramSource   = "source"
 	sourceYouTube = "youtube"
+	sourceVideo   = "video"
 )

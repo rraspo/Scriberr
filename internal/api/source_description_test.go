@@ -32,9 +32,12 @@ func TestDescribeSourceUsesOnlyDataTheJobCarries(t *testing.T) {
 		{"youtube with channel", youtubeWithChannel, "youtube", "Example Channel · YouTube"},
 		{"youtube without channel", describeTestJob("youtube", "Some video", "/data/uploads/b.mp3"), "youtube", "YouTube"},
 		{"plaud stays plaud", describeTestJob("plaud", "2026-01-13 19:48:59 [plaud-000000000001]", "/data/uploads/p.ogg"), "plaud", "Plaud"},
-		{"whatsapp inbox voice note", describeTestJob("whatsapp", "WhatsApp Audio 2026-01-25 at 11.28.53.ogg", "/data/uploads/w.ogg"), "whatsapp", "WhatsApp · Voice note"},
-		{"whatsapp inbox audio file", describeTestJob("whatsapp", "WhatsApp Audio 2026-01-25 at 19.10.01", "/data/uploads/w.mp3"), "whatsapp", "WhatsApp · Audio"},
-		{"whatsapp ptt uploaded by hand", describeTestJob("manual", "WhatsApp Ptt 2026-01-02 at 09.14.11", "/data/uploads/w.ogg"), "whatsapp", "WhatsApp · Voice note"},
+		// A forwarded audio looks the same as a voice note, so WhatsApp gets
+		// one plain label.
+		{"whatsapp inbox ogg", describeTestJob("whatsapp", "WhatsApp Audio 2026-01-25 at 11.28.53.ogg", "/data/uploads/w.ogg"), "whatsapp", "WhatsApp"},
+		{"whatsapp inbox mp3", describeTestJob("whatsapp", "WhatsApp Audio 2026-01-25 at 19.10.01", "/data/uploads/w.mp3"), "whatsapp", "WhatsApp"},
+		{"whatsapp ptt uploaded by hand", describeTestJob("manual", "WhatsApp Ptt 2026-01-02 at 09.14.11", "/data/uploads/w.ogg"), "whatsapp", "WhatsApp"},
+		{"video upload", describeTestJob("video", "Screen recording", "/data/uploads/v.mp3"), "video", "Video"},
 		{"phone call with contact", describeTestJob("manual", "Call Example Bank Óffice_260119_135909", "/data/uploads/c.m4a"), "call", "Call · Example Bank Óffice"},
 		{"phone call with a number", describeTestJob("manual", "Call +10000000000_260101_101010_01", "/data/uploads/c.m4a"), "call", "Call · +10000000000"},
 		{"phone call named in spanish", describeTestJob("manual", "Llamada soporte", "/data/uploads/c.m4a"), "call", "Call"},

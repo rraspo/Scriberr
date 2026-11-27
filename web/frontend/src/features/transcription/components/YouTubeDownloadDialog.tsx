@@ -186,9 +186,14 @@ export function YouTubeDownloadDialog({
               />
 
               {previewLoading && (
-                <div className="mt-2 space-y-2" aria-live="polite">
-                  <div className="w-full aspect-video rounded-md bg-[var(--bg-secondary)] animate-pulse" />
-                  <p className="text-sm text-[var(--text-secondary)]">Looking up the video...</p>
+                <div className="mt-2 rounded-md border border-[var(--border-subtle)] overflow-hidden" aria-live="polite">
+                  <div className="w-full aspect-video bg-gray-200 dark:bg-gray-700 motion-safe:animate-pulse" />
+                  <div className="p-3 space-y-2">
+                    <div className="h-4 w-3/4 rounded bg-gray-200 dark:bg-gray-700 motion-safe:animate-pulse" />
+                    <div className="h-3.5 w-1/2 rounded bg-gray-200 dark:bg-gray-700 motion-safe:animate-pulse" />
+                    <div className="h-3.5 w-1/3 rounded bg-gray-200 dark:bg-gray-700 motion-safe:animate-pulse" />
+                    <p className="text-sm text-[var(--text-secondary)]">Looking up the video...</p>
+                  </div>
                 </div>
               )}
 

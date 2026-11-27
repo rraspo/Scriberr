@@ -423,6 +423,10 @@ func (h *Handler) UploadVideo(c *gin.Context) {
 		ID:        jobID,
 		AudioPath: audioPath, // Use the extracted audio path
 		Status:    models.StatusUploaded,
+		Source:    sourceVideo,
+	}
+	if source := c.PostForm(paramSource); source != "" {
+		job.Source = source
 	}
 
 	if title := c.PostForm(paramTitle); title != "" {
