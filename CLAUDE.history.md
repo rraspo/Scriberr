@@ -1,5 +1,7 @@
 # CLAUDE.history.md — Scriberr fork
 
+- 2026-11-27 — Three WhatsApp recordings sat for 45 minutes: the primary GPU host was asleep, and the fallback GPU host's wrapper waited forever for room on a card another voice service held. Wrappers now give up after their wait limit with exit 5, and Scriberr moves on to the next tier. A cancelled run now kills its wrapper on the host; before, the orphan kept the card's lock.
+
 - 2026-11-26 — WhatsApp rows dropped the "Voice note"/"Audio" split, which was guessed from the .ogg extension. Owner: no sender/chat capture, since he forwards audios to Voicenotes. Video uploads now get `source=video`; older ones stay `manual`.
 
 - 2026-11-26 — YouTube jobs no longer use the default profile ("4090 Spanish" transcribed an English video into Spanish). A paste preview now shows the video's metadata and pre-selects the profile from YouTube's language. Auto-detect was rejected because it had misread an English talk as Welsh. Thumbnails are saved with the job and shown in the list.

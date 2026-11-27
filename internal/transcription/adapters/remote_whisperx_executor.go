@@ -50,6 +50,9 @@ func classifyRemoteFailure(err error) remoteFailureDecision {
 		if exitError.ExitStatus() == 127 {
 			return remoteFailureDecision{Fallback: true, Reason: "remote wrapper not found"}
 		}
+		if exitError.ExitStatus() == 5 {
+			return remoteFailureDecision{Fallback: true, Reason: "remote GPU busy"}
+		}
 		return remoteFailureDecision{Reason: fmt.Sprintf("remote wrapper exited with status %d", exitError.ExitStatus())}
 	}
 	if errors.Is(remoteFailure.Err, context.DeadlineExceeded) {
@@ -101,6 +104,12 @@ func (e *RemoteWhisperXExecutor) Execute(ctx context.Context, jobID, audioPath s
 	defer func() {
 		if !shouldCleanup {
 			return
+		}
+		if ctx.Err() != nil {
+			// Closing the SSH connection does not stop the wrapper on the host, so a
+			// cancelled run must stop it or it keeps the card's lock. The bracketed
+			// first character keeps pkill from matching the shell that runs it.
+			_ = e.transport.Exec(context.WithoutCancel(ctx), e.withPrefix("pkill -f -- "+shellArg("["+runID[:1]+"]"+runID[1:])), nil, nil, logFile)
 		}
 		cleanupErr := e.transport.Exec(context.WithoutCancel(ctx), e.withPrefix("rm -r -- "+shellArg(jobDir)), nil, nil, logFile)
 		if cleanupErr != nil && retErr == nil {

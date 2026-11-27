@@ -143,9 +143,14 @@ before a host-key management UI or setting exists.
 
 Remote execution moves to the next tier only when the remote service is
 unavailable: connection refusal, host lookup failure, SSH authentication
-failure, connection timeout, or a missing remote wrapper (exit status 127).
-Once a wrapper runs, its job-level exit statuses 2, 3, and 4 fail the job
-without further fallback so configuration and transcription errors stay visible.
+failure, connection timeout, a missing remote wrapper (exit status 127), or
+a busy card (exit status 5: the wrapper found no room on a shared GPU within
+its wait limit, reason `remote GPU busy`). Once a wrapper runs, its job-level
+exit statuses 2, 3, and 4 fail the job without further fallback so
+configuration and transcription errors stay visible. Closing the SSH
+connection does not stop a wrapper, so a cancelled run first runs
+`pkill -f -- '[<first char>]<rest of run ID>'` on the host (the bracket keeps
+pkill from matching its own shell), then removes the run directory.
 
 The tiers are: the job's own remote host; then, when the `is_fallback` profile
 matching the job's language is itself `remote` on a different host, that
@@ -154,8 +159,9 @@ fallback profile's parameters forced to `cpu`/`int8`, batch size 4. Any local
 run, including a GPU profile forced local with `execution_mode=local`, uses
 those CPU settings: the container has no GPU, and GPU-sized settings run a long
 recording out of its memory. A second GPU host's wrapper keeps the same
-contract as the first and may block until its card has room, so a busy shared
-card makes the job wait rather than fail. Each remote attempt submits under its
+contract as the first and may wait for room on its card, but only up to its
+limit: a wait that never ends would hold the single queue worker and every
+job behind it. Each remote attempt submits under its
 own run ID (job ID plus a per-attempt suffix), so a cancelled run's cleanup on
 the host never touches the next run's files.
 
