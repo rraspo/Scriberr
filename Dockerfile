@@ -77,8 +77,11 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
   && chmod 755 /usr/local/bin/uv \
   && uv --version
 
-# Install yt-dlp standalone binary
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+# Install yt-dlp standalone binary. Pinned: YouTube breaks old releases (a
+# months-old build gets HTTP 403 on audio), and an unpinned "latest" stays
+# frozen in the build cache. Bump this to the current release when downloads fail.
+ARG YT_DLP_VERSION=2026.11.23
+RUN curl -fL https://github.com/yt-dlp/yt-dlp/releases/download/${YT_DLP_VERSION}/yt-dlp -o /usr/local/bin/yt-dlp \
   && chmod a+rx /usr/local/bin/yt-dlp \
   && yt-dlp --version
 
