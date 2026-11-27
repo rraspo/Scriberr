@@ -40,6 +40,29 @@ import { useAudioListInfinite, type AudioFile } from "@/features/transcription/h
 import { useTranscriptionEvents } from "@/features/transcription/hooks/useTranscriptionEvents";
 import { buildStartTranscriptionUrl } from "@/lib/remoteExecution";
 
+// The 48px tile before a row's title: the saved thumbnail when the job has
+// one, otherwise (or when the image fails to load) the audio icon.
+function JobTile({ jobId, hasThumbnail }: { jobId: string; hasThumbnail: boolean }) {
+	const [imageFailed, setImageFailed] = useState(false);
+
+	if (hasThumbnail && !imageFailed) {
+		return (
+			<img
+				src={`/api/v1/transcription/${jobId}/thumbnail`}
+				alt=""
+				loading="lazy"
+				onError={() => setImageFailed(true)}
+				className="flex-shrink-0 w-12 h-12 rounded-xl object-cover transition-opacity duration-200"
+			/>
+		);
+	}
+	return (
+		<div className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-[#FFFAF0] text-[#FF6D20] transition-opacity duration-200">
+			<FileAudio className="h-6 w-6" strokeWidth={2} />
+		</div>
+	);
+}
+
 const JobStatusMonitor = memo(function JobStatusMonitor({ jobId }: { jobId: string }) {
 	useTranscriptionEvents(jobId);
 	return null;
@@ -811,9 +834,7 @@ export const AudioFilesTable = memo(function AudioFilesTable({
 								>
 									<div className="flex items-center gap-4 min-w-0 transition-[padding] duration-200">
 										{/* Icon (Tinted Pastel Square) - Lighter Shade */}
-										<div className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-[#FFFAF0] text-[#FF6D20] transition-opacity duration-200">
-											<FileAudio className="h-6 w-6" strokeWidth={2} />
-										</div>
+										<JobTile jobId={file.id} hasThumbnail={Boolean(file.thumbnail_path)} />
 
 										{/* Text */}
 										<div className="min-w-0">

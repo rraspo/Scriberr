@@ -94,6 +94,25 @@ func TestStartTranscriptionWithProfileSnapshotsExecution(t *testing.T) {
 	require.Equal(t, 25, job.Execution.ConnectTimeoutSeconds)
 }
 
+func TestStartTranscriptionRecordsTheProfileName(t *testing.T) {
+	handler, db := newStartTranscriptionTestHandler(t)
+	profile := createRemoteProfile(t, db)
+	createUploadedJob(t, db, "job-named")
+
+	started := performStartRequest(t, handler, "job-named", "?profile_id="+profile.ID, profile.Parameters)
+	require.Equal(t, http.StatusOK, started.Code, started.Body.String())
+	var job models.TranscriptionJob
+	require.NoError(t, db.First(&job, "id = ?", "job-named").Error)
+	require.NotNil(t, job.ProfileName)
+	require.Equal(t, "Remote GPU", *job.ProfileName)
+
+	require.NoError(t, db.Model(&models.TranscriptionJob{}).Where("id = ?", "job-named").Update("status", models.StatusFailed).Error)
+	restarted := performStartRequest(t, handler, "job-named", "", models.WhisperXParams{Model: "small", Device: "cpu"})
+	require.Equal(t, http.StatusOK, restarted.Code, restarted.Body.String())
+	require.NoError(t, db.First(&job, "id = ?", "job-named").Error)
+	require.Nil(t, job.ProfileName, "custom parameters are not a profile")
+}
+
 func TestStartTranscriptionWithoutProfileResetsExecutionToLocal(t *testing.T) {
 	handler, db := newStartTranscriptionTestHandler(t)
 	profile := createRemoteProfile(t, db)

@@ -171,19 +171,36 @@ run would otherwise overwrite the restart's status.
 
 ## YouTube links
 
-`POST /api/v1/transcription/youtube` accepts only http(s) links on
-`youtube.com`, `www.`/`m.`/`music.youtube.com` or `youtu.be`. One yt-dlp
-metadata call (`--print title --print channel`) runs before the audio
-download. The job is stored with `source` `youtube`, `source_url` (the
-trimmed link), `source_channel` (nil when yt-dlp reports `NA`) and the video
-title unless a custom title is given. It is queued straight away with the
-user's default profile, else the system default, else the first profile. When
-no profile exists or enqueueing fails, the job stays `uploaded` with the
-reason in `error_message`, and the response is still 200. A failed download
+Links are accepted only over http(s) on `youtube.com`,
+`www.`/`m.`/`music.youtube.com` or `youtu.be`. Metadata comes from one
+`yt-dlp --dump-json --skip-download` call (null or `NA` fields count as
+absent).
+
+`POST /api/v1/transcription/youtube/preview` returns title, channel, duration,
+the language as YouTube reports it, yt-dlp's thumbnail URL (the dialog loads
+it straight from YouTube; the app sets no CSP) and `suggested_profile_id`: the
+profile whose language matches the base language, non-fallback first, then
+default, then oldest; null when YouTube gives no language or nothing matches.
+Auto-detect is deliberately not used: it misread an English talk that opens
+with music as Welsh.
+
+`POST /api/v1/transcription/youtube` requires `profile_id` (400
+`profile_required` / `unknown_profile`, checked before yt-dlp runs); the job
+is queued with that profile and records `profile_name`. It is stored with
+`source` `youtube`, `source_url` (the trimmed link), `source_channel` and the
+video title unless a custom title is given. A small thumbnail
+(`i.ytimg.com/vi/<id>/mqdefault.jpg`, fetched by validated video id, never an
+arbitrary URL) is saved to `<UploadDir>/thumbnails/<job id>.jpg`, served by
+`GET /api/v1/transcription/:id/thumbnail`, removed with the job, and shown in
+the list tile; a failed fetch leaves the job without one. When enqueueing
+fails, the job stays `uploaded` with the reason in `error_message`, and the
+response is still 200. A failed download
 creates no job, leaves no file, and returns `{error, code}` with code
 `invalid_url` (400), `video_unavailable` (422), `youtube_blocked` (502) or
 `download_failed` (502). The recording page links back to `source_url` with
-the channel name. The download runs inside the HTTP request (a 40-minute
+the channel name and shows the language and profile any job ran with
+(`profile_name` is also set by starting a job with `profile_id`, and cleared
+for custom parameters). The download runs inside the HTTP request (a 40-minute
 video takes about 30 seconds); once it finishes, the job is saved even if the
 browser has gone away. yt-dlp is pinned in the Dockerfile
 (`YT_DLP_VERSION`); bump it when YouTube starts answering 403.

@@ -10,6 +10,10 @@ export interface AudioFile {
     diarization?: boolean;
     is_multi_track?: boolean;
     error_message?: string;
+    thumbnail_path?: string;
+    profile_name?: string;
+    source_url?: string;
+    source_channel?: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     individual_transcripts?: any;
     speakers?: number;
@@ -166,12 +170,59 @@ export function useMultiTrackUpload() {
     });
 }
 
+export interface YouTubePreview {
+    video_id: string;
+    title: string;
+    channel?: string | null;
+    duration_seconds?: number | null;
+    language?: string | null;
+    thumbnail_url: string;
+    suggested_profile_id?: string | null;
+}
+
+// Looks a video up without downloading it; the query is cancelled when the
+// URL changes or the dialog closes.
+export function useYouTubePreview(url: string, enabled: boolean) {
+    const { getAuthHeaders } = useAuth();
+
+    return useQuery({
+        queryKey: ['youtubePreview', url],
+        enabled,
+        retry: false,
+        staleTime: 5 * 60 * 1000,
+        queryFn: async ({ signal }) => {
+            const response = await fetch("/api/v1/transcription/youtube/preview", {
+                method: "POST",
+                signal,
+                headers: {
+                    "Content-Type": "application/json",
+                    ...getAuthHeaders(),
+                },
+                body: JSON.stringify({ url }),
+            });
+            if (!response.ok) {
+                let message = `Could not look up the video (HTTP ${response.status})`;
+                try {
+                    const errorData = await response.json();
+                    if (errorData && typeof errorData.error === "string" && errorData.error) {
+                        message = errorData.error;
+                    }
+                } catch {
+                    // A proxy may answer with non-JSON; keep the generic message.
+                }
+                throw new Error(message);
+            }
+            return (await response.json()) as YouTubePreview;
+        },
+    });
+}
+
 export function useYouTubeDownload() {
     const { getAuthHeaders } = useAuth();
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ url, title }: { url: string, title?: string }) => {
+        mutationFn: async ({ url, title, profileId }: { url: string, title?: string, profileId: string }) => {
             const response = await fetch("/api/v1/transcription/youtube", {
                 method: "POST",
                 headers: {
@@ -181,6 +232,7 @@ export function useYouTubeDownload() {
                 body: JSON.stringify({
                     url: url.trim(),
                     title: title?.trim() || undefined,
+                    profile_id: profileId,
                 }),
             });
 

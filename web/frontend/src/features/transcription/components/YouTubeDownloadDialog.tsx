@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,13 +9,33 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { languageName } from "@/lib/languageName";
 import { Youtube, Download, AlertCircle, CheckCircle, AlertTriangle } from "lucide-react";
-import { useYouTubeDownload } from "@/features/transcription/hooks/useAudioFiles";
+import { useYouTubeDownload, useYouTubePreview, useTranscriptionProfiles } from "@/features/transcription/hooks/useAudioFiles";
 
 interface YouTubeDownloadDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onDownloadComplete?: () => void;
+}
+
+function validateYouTubeUrl(value: string): boolean {
+  return value.includes("youtube.com") || value.includes("youtu.be");
+}
+
+function formatDuration(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
 }
 
 export function YouTubeDownloadDialog({
@@ -30,10 +50,24 @@ export function YouTubeDownloadDialog({
   const [success, setSuccess] = useState(false);
   const [notQueued, setNotQueued] = useState<{ title: string; reason: string } | null>(null);
   const [queuedTitle, setQueuedTitle] = useState("");
+  const [debouncedUrl, setDebouncedUrl] = useState("");
+  const [chosenProfileId, setChosenProfileId] = useState<string | null>(null);
+  const { data: profiles } = useTranscriptionProfiles();
 
-  const validateYouTubeUrl = (url: string): boolean => {
-    return url.includes('youtube.com') || url.includes('youtu.be');
-  };
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedUrl(url.trim()), 500);
+    return () => clearTimeout(handle);
+  }, [url]);
+
+  const urlLooksValid = validateYouTubeUrl(debouncedUrl);
+  const preview = useYouTubePreview(debouncedUrl, isOpen && urlLooksValid);
+  const previewData = urlLooksValid ? preview.data : undefined;
+  const previewLoading = urlLooksValid && (url.trim() !== debouncedUrl || preview.isFetching);
+  const previewError = urlLooksValid && url.trim() === debouncedUrl && preview.isError
+    ? (preview.error instanceof Error ? preview.error.message : "Could not look up the video.")
+    : null;
+  const profileId = chosenProfileId ?? previewData?.suggested_profile_id ?? "";
+  const canSubmit = Boolean(previewData) && !previewLoading && Boolean(profileId) && !isDownloading;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,10 +82,15 @@ export function YouTubeDownloadDialog({
       return;
     }
 
+    if (!profileId) {
+      setError("Choose a transcription profile first");
+      return;
+    }
+
     setError(null);
 
     try {
-      const job = await downloadYouTube({ url, title });
+      const job = await downloadYouTube({ url, title, profileId });
       const jobTitle = job.title || "The video";
       if (job.status === "pending") {
         setQueuedTitle(jobTitle);
@@ -74,20 +113,15 @@ export function YouTubeDownloadDialog({
 
   const handleClose = () => {
     setTitle("");
+    setUrl("");
+    setDebouncedUrl("");
+    setChosenProfileId(null);
     setError(null);
     setSuccess(false);
     setNotQueued(null);
     setQueuedTitle("");
     onClose();
   };
-
-  const getYouTubeVideoId = (url: string): string | null => {
-    const regex = /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/;
-    const match = url.match(regex);
-    return match ? match[1] : null;
-  };
-
-  const videoId = getYouTubeVideoId(url);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -151,20 +185,72 @@ export function YouTubeDownloadDialog({
                 disabled={isDownloading}
               />
 
-              {/* YouTube thumbnail preview */}
-              {videoId && (
-                <div className="mt-2">
+              {previewLoading && (
+                <div className="mt-2 space-y-2" aria-live="polite">
+                  <div className="w-full aspect-video rounded-md bg-[var(--bg-secondary)] animate-pulse" />
+                  <p className="text-sm text-[var(--text-secondary)]">Looking up the video...</p>
+                </div>
+              )}
+
+              {!previewLoading && previewError && (
+                <div className="flex items-center gap-2 p-3 bg-[var(--error)]/10 border border-[var(--error)]/20 rounded-[var(--radius-input)]">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-[var(--error)]" />
+                  <p className="text-sm text-[var(--error)]">{previewError}</p>
+                </div>
+              )}
+
+              {!previewLoading && previewData && (
+                <div className="mt-2 rounded-md border border-[var(--border-subtle)] overflow-hidden">
                   <img
-                    src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`}
-                    alt="YouTube thumbnail"
-                    className="w-full h-32 object-cover rounded-md border"
+                    src={previewData.thumbnail_url}
+                    alt=""
+                    className="w-full aspect-video object-cover"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
+                      (e.target as HTMLImageElement).style.display = "none";
                     }}
                   />
+                  <div className="p-3 space-y-1">
+                    <p className="font-medium text-[var(--text-primary)] leading-snug">{previewData.title}</p>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      {[
+                        previewData.channel,
+                        typeof previewData.duration_seconds === "number" ? formatDuration(previewData.duration_seconds) : null,
+                      ].filter(Boolean).join(" · ")}
+                    </p>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      {previewData.language
+                        ? `${languageName(previewData.language)} (${previewData.language})`
+                        : "Language not reported by YouTube"}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
+
+            {previewData && !previewLoading && (
+              <div className="space-y-2">
+                <Label htmlFor="youtube-profile">Transcription profile</Label>
+                <Select value={profileId} onValueChange={setChosenProfileId}>
+                  <SelectTrigger id="youtube-profile" className="w-full">
+                    <SelectValue placeholder="Choose a profile" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(profiles ?? []).map((profile) => (
+                      <SelectItem key={profile.id} value={profile.id}>
+                        {profile.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!previewData.suggested_profile_id && !chosenProfileId && (
+                  <p className="text-xs text-[var(--text-tertiary)]">
+                    {previewData.language
+                      ? "No profile matches the language YouTube reported. Choose one."
+                      : "YouTube reported no matching language. Choose a profile."}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="custom-title">Custom Title (Optional)</Label>
@@ -199,7 +285,7 @@ export function YouTubeDownloadDialog({
               </Button>
               <Button
                 type="submit"
-                disabled={isDownloading || !url.trim()}
+                disabled={!canSubmit}
                 className="min-w-24"
               >
                 {isDownloading ? (

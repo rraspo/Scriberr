@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
-import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, MessageCircle, FileJson, Clock, AlertCircle, Users, Copy, Hash, Link2, Youtube } from "lucide-react";
+import { languageName } from "@/lib/languageName";
+import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, MessageCircle, FileJson, Clock, AlertCircle, Users, Copy, Hash, Link2, Youtube, Languages } from "lucide-react";
 import { SplitButton } from "@/components/ui/split-button";
 import { useToast } from "@/components/ui/toast";
 import { Header } from "@/components/Header";
@@ -247,21 +248,39 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                 </div>
                                             )}
 
-                                            {/* Source video link */}
-                                            {audioFile.source_url && /^https?:\/\//i.test(audioFile.source_url) && (
-                                                <a
-                                                    href={audioFile.source_url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    aria-label="Open the source video on YouTube"
-                                                    className="inline-flex items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                                                >
-                                                    <Youtube className="h-4 w-4 text-[var(--error)]" />
-                                                    <span className="truncate">
-                                                        {audioFile.source_channel ? `${audioFile.source_channel} · Watch on YouTube` : "Watch on YouTube"}
-                                                    </span>
-                                                </a>
-                                            )}
+                                            {/* Source video link, language and profile */}
+                                            {(() => {
+                                                const languageTag = audioFile.parameters?.language as string | undefined;
+                                                const ranWith = [languageTag ? languageName(languageTag) : null, audioFile.profile_name]
+                                                    .filter(Boolean)
+                                                    .join(" · ");
+                                                const hasSourceLink = audioFile.source_url && /^https?:\/\//i.test(audioFile.source_url);
+                                                if (!hasSourceLink && !ranWith) return null;
+                                                return (
+                                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[var(--text-secondary)]">
+                                                        {hasSourceLink && (
+                                                            <a
+                                                                href={audioFile.source_url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                aria-label="Open the source video on YouTube"
+                                                                className="inline-flex items-center gap-2 hover:text-[var(--text-primary)] transition-colors"
+                                                            >
+                                                                <Youtube className="h-4 w-4 text-[var(--error)]" />
+                                                                <span className="truncate">
+                                                                    {audioFile.source_channel ? `${audioFile.source_channel} · Watch on YouTube` : "Watch on YouTube"}
+                                                                </span>
+                                                            </a>
+                                                        )}
+                                                        {ranWith && (
+                                                            <span className="inline-flex items-center gap-2">
+                                                                <Languages className="h-4 w-4 text-[var(--text-tertiary)]" />
+                                                                {ranWith}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
 
                                             {/* Badges */}
                                             <div className="flex items-center gap-3 text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">

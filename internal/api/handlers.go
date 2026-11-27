@@ -8,11 +8,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -40,6 +42,7 @@ type Handler struct {
 	config                    *config.Config
 	authService               *auth.AuthService
 	userService               service.UserService
+	youTubeThumbnailBaseURL   string
 	fileService               service.FileService
 	jobRepo                   repository.JobRepository
 	apiKeyRepo                repository.APIKeyRepository
@@ -173,8 +176,9 @@ type CreateAPIKeyResponse struct {
 
 // YouTubeDownloadRequest represents the YouTube download request
 type YouTubeDownloadRequest struct {
-	URL   string  `json:"url" binding:"required"`
-	Title *string `json:"title,omitempty"`
+	URL       string  `json:"url" binding:"required"`
+	Title     *string `json:"title,omitempty"`
+	ProfileID string  `json:"profile_id"`
 }
 
 // YouTubeDownloadResponse represents the YouTube download response
@@ -353,6 +357,7 @@ func (h *Handler) UploadAudio(c *gin.Context) {
 				job.Parameters = profile.Parameters
 				job.Execution = profileExecutionSnapshot(profile)
 				job.Diarization = profile.Parameters.Diarize
+				job.ProfileName = &profile.Name
 				job.Status = models.StatusPending
 
 				// Update the job in database
@@ -998,6 +1003,7 @@ func (h *Handler) StartTranscription(c *gin.Context) {
 	// Snapshot execution settings from the selected profile; custom-parameter
 	// starts run locally.
 	execution := models.ProfileExecution{Mode: "local", RemotePort: 22, ConnectTimeoutSeconds: 10}
+	var profileName *string
 	if profileID := c.Query("profile_id"); profileID != "" {
 		profile, err := h.profileRepo.FindByID(c.Request.Context(), profileID)
 		if err != nil {
@@ -1005,6 +1011,7 @@ func (h *Handler) StartTranscription(c *gin.Context) {
 			return
 		}
 		execution = profileExecutionSnapshot(profile)
+		profileName = &profile.Name
 	}
 
 	// Remote execution can only come from a profile; the override exists so the
@@ -1020,6 +1027,7 @@ func (h *Handler) StartTranscription(c *gin.Context) {
 	// Update job with parameters
 	job.Parameters = *requestParams
 	job.Execution = execution
+	job.ProfileName = profileName
 	job.Diarization = requestParams.Diarize
 	job.Status = models.StatusPending
 
@@ -1296,6 +1304,10 @@ func (h *Handler) DeleteTranscriptionJob(c *gin.Context) {
 		_ = h.fileService.RemoveDirectory(*job.MultiTrackFolder)
 	} else {
 		_ = h.fileService.RemoveFile(job.AudioPath)
+	}
+
+	if job.ThumbnailPath != nil {
+		_ = h.fileService.RemoveFile(*job.ThumbnailPath)
 	}
 
 	// Also remove .aup file if exists
@@ -2668,9 +2680,22 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 		return
 	}
 
+	// Nothing below depends on the browser still waiting: a finished download
+	// must not be thrown away when the tab closes.
+	ctx := context.WithoutCancel(c.Request.Context())
+
 	req.URL = strings.TrimSpace(req.URL)
 	if !isYouTubeURL(req.URL) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "That is not a YouTube link. Paste a youtube.com or youtu.be URL.", "code": "invalid_url"})
+		return
+	}
+	if strings.TrimSpace(req.ProfileID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Choose a transcription profile for this video.", "code": "profile_required"})
+		return
+	}
+	profile, err := h.profileRepo.FindByID(ctx, req.ProfileID)
+	if err != nil || profile == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "That transcription profile does not exist.", "code": "unknown_profile"})
 		return
 	}
 
@@ -2694,33 +2719,23 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 		}
 	}
 
-	// Get video title if not provided
-	// One metadata call yields the video title and the channel.
-	var title string
+	title := "YouTube Audio"
 	var channel *string
-	metadataStart := time.Now()
-	metadataCmd := exec.Command("yt-dlp", "--skip-download", "--no-playlist", "--print", "title", "--print", "channel", req.URL)
-	var metadataOut bytes.Buffer
-	var metadataStderr bytes.Buffer
-	metadataCmd.Stdout = &metadataOut
-	metadataCmd.Stderr = &metadataStderr
-	if err := metadataCmd.Run(); err != nil {
-		logger.Warn("Failed to get YouTube metadata", "url", req.URL, "error", err.Error(), "stderr", metadataStderr.String(), "duration", time.Since(metadataStart))
-		status, code, message := classifyYouTubeFailure(metadataStderr.String())
+	var videoID string
+	metadata, metadataStderr, metadataErr := fetchYouTubeMetadata(req.URL)
+	if metadataErr != nil {
+		logger.Warn("Failed to get YouTube metadata", "url", req.URL, "error", metadataErr.Error(), "stderr", metadataStderr)
+		status, code, message := classifyYouTubeFailure(metadataStderr)
 		if code != "download_failed" {
 			c.JSON(status, gin.H{"error": message, "code": code})
 			return
 		}
-		title = "YouTube Audio"
 	} else {
-		lines := strings.Split(strings.TrimSpace(metadataOut.String()), "\n")
-		title = strings.TrimSpace(lines[0])
-		if len(lines) > 1 {
-			if name := strings.TrimSpace(lines[1]); name != "" && name != "NA" {
-				channel = &name
-			}
+		if metadata.Title != "" {
+			title = metadata.Title
 		}
-		logger.Info("YouTube metadata retrieved", "title", title, "duration", time.Since(metadataStart))
+		channel = metadata.Channel
+		videoID = metadata.ID
 	}
 	if req.Title != nil && *req.Title != "" {
 		title = *req.Title
@@ -2782,61 +2797,261 @@ func (h *Handler) DownloadFromYouTube(c *gin.Context) {
 			"duration", time.Since(downloadStart))
 	}
 
-	// Create transcription record; a downloaded video is always queued.
+	profileName := profile.Name
 	job := models.TranscriptionJob{
 		ID:            jobID,
 		AudioPath:     actualFilePath,
-		Status:        models.StatusUploaded,
+		Status:        models.StatusPending,
 		Source:        sourceYouTube,
 		SourceURL:     &req.URL,
 		SourceChannel: channel,
+		Title:         &title,
+		ProfileName:   &profileName,
+		Parameters:    profile.Parameters,
+		Execution:     profileExecutionSnapshot(profile),
+		Diarization:   profile.Parameters.Diarize,
 	}
-	if title != "" {
-		job.Title = &title
-	}
+	job.ThumbnailPath = h.saveYouTubeThumbnail(ctx, uploadDir, jobID, videoID)
 
-	// The download is done; a browser that gave up waiting (closed tab, locked
-	// phone) must not throw it away, so the job is saved without the request's
-	// cancellation.
-	saveContext := context.WithoutCancel(c.Request.Context())
-
-	var user *models.User
-	if userID, exists := c.Get("user_id"); exists && h.userService != nil {
-		if id, ok := userID.(uint); ok {
-			if foundUser, userErr := h.userService.GetUser(saveContext, id); userErr == nil {
-				user = foundUser
-			}
-		}
-	}
-
-	profile := h.profileForQueueing(saveContext, user)
-	if profile != nil {
-		job.Parameters = profile.Parameters
-		job.Execution = profileExecutionSnapshot(profile)
-		job.Diarization = profile.Parameters.Diarize
-		job.Status = models.StatusPending
-	} else {
-		reason := "Downloaded, but no transcription profile exists to queue it with"
-		job.ErrorMessage = &reason
-	}
-
-	if err := h.jobRepo.Create(saveContext, &job); err != nil {
+	if err := h.jobRepo.Create(ctx, &job); err != nil {
 		removePartials()
+		if job.ThumbnailPath != nil {
+			_ = os.Remove(*job.ThumbnailPath)
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save transcription record", "code": "download_failed"})
 		return
 	}
 
-	if profile != nil {
-		if err := h.taskQueue.EnqueueJob(jobID); err != nil {
-			logger.Warn("Failed to queue YouTube job", "job_id", jobID, "error", err.Error())
-			reason := fmt.Sprintf("Downloaded, but could not be queued: %v", err)
-			job.Status = models.StatusUploaded
-			job.ErrorMessage = &reason
-			_ = h.jobRepo.Update(saveContext, &job)
-		}
+	if err := h.taskQueue.EnqueueJob(jobID); err != nil {
+		logger.Warn("Failed to queue YouTube job", "job_id", jobID, "error", err.Error())
+		reason := fmt.Sprintf("Downloaded, but could not be queued: %v", err)
+		job.Status = models.StatusUploaded
+		job.ErrorMessage = &reason
+		_ = h.jobRepo.Update(ctx, &job)
 	}
 
 	c.JSON(http.StatusOK, job)
+}
+
+// youTubeMetadata is the part of yt-dlp's info JSON the app uses.
+type youTubeMetadata struct {
+	ID              string
+	Title           string
+	Channel         *string
+	DurationSeconds *int
+	Language        *string
+	ThumbnailURL    string
+}
+
+// fetchYouTubeMetadata asks yt-dlp for a video's info without downloading it.
+// On failure it returns yt-dlp's stderr for classification.
+func fetchYouTubeMetadata(videoURL string) (*youTubeMetadata, string, error) {
+	cmd := exec.Command("yt-dlp", "--dump-json", "--skip-download", "--no-playlist", videoURL)
+	var out, stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, stderr.String(), err
+	}
+	var raw struct {
+		ID        *string  `json:"id"`
+		Title     *string  `json:"title"`
+		Channel   *string  `json:"channel"`
+		Duration  *float64 `json:"duration"`
+		Language  *string  `json:"language"`
+		Thumbnail *string  `json:"thumbnail"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &raw); err != nil {
+		return nil, stderr.String(), fmt.Errorf("unreadable yt-dlp metadata: %w", err)
+	}
+	present := func(value *string) string {
+		if value == nil {
+			return ""
+		}
+		trimmed := strings.TrimSpace(*value)
+		if trimmed == "NA" {
+			return ""
+		}
+		return trimmed
+	}
+	optional := func(value *string) *string {
+		if text := present(value); text != "" {
+			return &text
+		}
+		return nil
+	}
+	metadata := &youTubeMetadata{
+		ID:           present(raw.ID),
+		Title:        present(raw.Title),
+		Channel:      optional(raw.Channel),
+		Language:     optional(raw.Language),
+		ThumbnailURL: present(raw.Thumbnail),
+	}
+	if raw.Duration != nil {
+		seconds := int(*raw.Duration)
+		metadata.DurationSeconds = &seconds
+	}
+	return metadata, stderr.String(), nil
+}
+
+var youTubeVideoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+
+const (
+	defaultYouTubeThumbnailBaseURL = "https://i.ytimg.com"
+	maxYouTubeThumbnailBytes       = 2 << 20
+)
+
+// saveYouTubeThumbnail stores YouTube's small thumbnail under
+// <upload dir>/thumbnails/<job id>.jpg and returns its path. Any failure is
+// logged and yields nil: a missing thumbnail never blocks queueing.
+func (h *Handler) saveYouTubeThumbnail(ctx context.Context, uploadDir, jobID, videoID string) *string {
+	if !youTubeVideoIDPattern.MatchString(videoID) {
+		logger.Warn("No usable YouTube video id for thumbnail", "job_id", jobID)
+		return nil
+	}
+	baseURL := h.youTubeThumbnailBaseURL
+	if baseURL == "" {
+		baseURL = defaultYouTubeThumbnailBaseURL
+	}
+	fetchContext, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(fetchContext, http.MethodGet, baseURL+"/vi/"+videoID+"/mqdefault.jpg", nil)
+	if err != nil {
+		logger.Warn("YouTube thumbnail request failed", "job_id", jobID, "error", err.Error())
+		return nil
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		logger.Warn("YouTube thumbnail fetch failed", "job_id", jobID, "error", err.Error())
+		return nil
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		logger.Warn("YouTube thumbnail not available", "job_id", jobID, "status", response.StatusCode)
+		return nil
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, maxYouTubeThumbnailBytes+1))
+	if err != nil || len(data) == 0 || len(data) > maxYouTubeThumbnailBytes {
+		logger.Warn("YouTube thumbnail unusable", "job_id", jobID, "bytes", len(data))
+		return nil
+	}
+	thumbnailDir := filepath.Join(uploadDir, "thumbnails")
+	if err := os.MkdirAll(thumbnailDir, 0755); err != nil {
+		logger.Warn("Cannot create thumbnail directory", "error", err.Error())
+		return nil
+	}
+	thumbnailPath := filepath.Join(thumbnailDir, jobID+".jpg")
+	if err := os.WriteFile(thumbnailPath, data, 0644); err != nil {
+		_ = os.Remove(thumbnailPath)
+		logger.Warn("Cannot save YouTube thumbnail", "job_id", jobID, "error", err.Error())
+		return nil
+	}
+	return &thumbnailPath
+}
+
+// PreviewYouTube looks a video up without downloading it and suggests the
+// profile whose language matches the video's.
+// @Summary Preview a YouTube video
+// @Tags transcription
+// @Accept json
+// @Produce json
+// @Router /api/v1/transcription/youtube/preview [post]
+// @Security ApiKeyAuth
+// @Security BearerAuth
+func (h *Handler) PreviewYouTube(c *gin.Context) {
+	var req struct {
+		URL string `json:"url" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_url"})
+		return
+	}
+	videoURL := strings.TrimSpace(req.URL)
+	if !isYouTubeURL(videoURL) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "That is not a YouTube link. Paste a youtube.com or youtu.be URL.", "code": "invalid_url"})
+		return
+	}
+
+	metadata, stderr, err := fetchYouTubeMetadata(videoURL)
+	if err != nil {
+		logger.Warn("YouTube preview failed", "url", videoURL, "error", err.Error(), "stderr", stderr)
+		status, code, message := classifyYouTubeFailure(stderr)
+		c.JSON(status, gin.H{"error": message, "code": code})
+		return
+	}
+
+	var suggestedProfileID *string
+	if metadata.Language != nil {
+		profiles, _, _ := h.profileRepo.List(c.Request.Context(), 0, 1000)
+		suggestedProfileID = suggestProfileForLanguage(profiles, *metadata.Language)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"video_id":             metadata.ID,
+		"title":                metadata.Title,
+		"channel":              metadata.Channel,
+		"duration_seconds":     metadata.DurationSeconds,
+		"language":             metadata.Language,
+		"thumbnail_url":        metadata.ThumbnailURL,
+		"suggested_profile_id": suggestedProfileID,
+	})
+}
+
+// suggestProfileForLanguage matches a YouTube language tag (en-US, es) to a
+// profile by base language: non-fallback first, then the default, then the
+// oldest. Only fallback matches are suggested when nothing else fits.
+func suggestProfileForLanguage(profiles []models.TranscriptionProfile, language string) *string {
+	base := strings.ToLower(language)
+	if cut := strings.IndexAny(base, "-_"); cut >= 0 {
+		base = base[:cut]
+	}
+	if base == "" {
+		return nil
+	}
+	var best *models.TranscriptionProfile
+	better := func(candidate, current *models.TranscriptionProfile) bool {
+		if candidate.IsFallback != current.IsFallback {
+			return !candidate.IsFallback
+		}
+		if candidate.IsDefault != current.IsDefault {
+			return candidate.IsDefault
+		}
+		return candidate.CreatedAt.Before(current.CreatedAt)
+	}
+	for index := range profiles {
+		candidate := &profiles[index]
+		if candidate.Parameters.Language == nil || strings.ToLower(*candidate.Parameters.Language) != base {
+			continue
+		}
+		if best == nil || better(candidate, best) {
+			best = candidate
+		}
+	}
+	if best == nil {
+		return nil
+	}
+	return &best.ID
+}
+
+// GetJobThumbnail serves the thumbnail saved with a job.
+// @Summary Get job thumbnail
+// @Tags transcription
+// @Produce image/jpeg
+// @Router /api/v1/transcription/{id}/thumbnail [get]
+// @Security ApiKeyAuth
+func (h *Handler) GetJobThumbnail(c *gin.Context) {
+	job, err := h.jobRepo.FindByID(c.Request.Context(), c.Param("id"))
+	if err != nil || job.ThumbnailPath == nil || *job.ThumbnailPath == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Thumbnail not found"})
+		return
+	}
+	data, err := os.ReadFile(*job.ThumbnailPath)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Thumbnail not found"})
+		return
+	}
+	c.Header("Cache-Control", "private, max-age=31536000, immutable")
+	c.Data(http.StatusOK, "image/jpeg", data)
 }
 
 // profileForQueueing picks the profile a freshly stored job is queued with:

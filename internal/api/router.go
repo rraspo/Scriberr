@@ -142,10 +142,12 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 				uploadRoutes.POST("/upload-video", handler.UploadVideo)
 				uploadRoutes.POST("/upload-multitrack", handler.UploadMultiTrack)
 				uploadRoutes.GET("/:id/audio", handler.GetAudioFile) // Audio streaming shouldn't be compressed
+				uploadRoutes.GET("/:id/thumbnail", handler.GetJobThumbnail)
 			}
 
 			// Regular API routes with compression
 			transcription.POST("/youtube", handler.DownloadFromYouTube)
+			transcription.POST("/youtube/preview", handler.PreviewYouTube)
 			transcription.POST("/submit", handler.SubmitJob)
 			transcription.POST("/:id/start", handler.StartTranscription)
 			transcription.POST("/:id/kill", handler.KillJob)
