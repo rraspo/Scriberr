@@ -249,6 +249,48 @@ video takes about 30 seconds); once it finishes, the job is saved even if the
 browser has gone away. yt-dlp is pinned in the Dockerfile
 (`YT_DLP_VERSION`); bump it when YouTube starts answering 403.
 
+### Link visuals
+
+Every link import keeps its video and builds frames a session can read.
+yt-dlp downloads the best video up to 720p with audio (`-f
+"bv*[height<=720]+ba/b[height<=720]/bv*+ba/b"`, `-k`, `--merge-output-format
+mp4`) and extracts `<job>.mp3`; the mp3 is transcribed, the video is
+`video_path`. A post whose audio extraction fails for lack of an audio track
+still keeps its video and gets visuals. When a video exists the job gets
+`visuals_status` `pending`, and the build runs in a background goroutine
+(`internal/api/link_visuals.go`, `link_sheets.go`): `ffprobe` reads the
+duration, `frameRateFor` picks 2 frames a second under 20 s, 1 a second up to
+600 s, then `600/duration` (about 600 frames in all), and one ffmpeg pass
+extracts the even grid from time zero, scaled to 720 px on the long side. Over
+600 s, scene changes (`scene>0.3` on keyframes) are added unless within 0.5 s
+of a kept time. Frames are stored as `<UploadDir>/visuals/<job>/frames/<n>.jpg`,
+numbered in time order. Contact sheets tile 12 consecutive frames (4 columns by
+3 rows, 400 px tiles in the first frame's aspect ratio, black letterbox) with
+each timestamp burned into its tile's bottom-left corner, saved as JPEG at
+`.../sheets/<n>.jpg`. After a successful build the video is deleted when it is
+over `maxKeptVideoBytes` (500 MB) and kept otherwise. The build ends `ready` or
+`failed` with a short `visuals_error`; it never changes the transcription
+status.
+
+- `GET /api/v1/transcription/:id/visuals` returns `{status
+  (none|pending|ready|failed), error|null, sheets[], frames[], video|null}`;
+  `video` is present only while the file exists. `GET .../frames/:index`,
+  `.../sheets/:index` (image/jpeg, immutable cache; a bad index is 404) and
+  `.../video` (Range supported) serve the files. All sit in the uncompressed
+  route group.
+- `POST .../visuals` rebuilds: 404 unknown job, 400 `no_source_link` without a
+  supported source link, 409 `visuals_pending`, else 202 with the visuals body.
+  It rebuilds from the kept video, otherwise downloads the video again
+  without audio extraction. The job's audio, transcript and status are never
+  touched; this is how imports from before visuals get them.
+- The links status body carries `visuals_status` and `visuals_url`.
+- `FailInterruptedVisuals` runs at server start and marks every `pending`
+  build `failed` with how to rebuild it.
+- Deleting a job removes its `visuals/<job>/` folder and its video.
+- The recording page shows a "Frames" strip of the contact sheets (each opens
+  full size in a new tab) and a "Video" link; "Building frames…" while
+  pending and the muted error when failed.
+
 ## Job source description
 
 The list and single-job APIs (and the YouTube download response) add

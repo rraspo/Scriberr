@@ -180,6 +180,9 @@ func main() {
 	handler.SetSpeakerProfileRepo(speakerProfileRepo)
 	handler.SetSpeakerEmbeddingExtractor(speakerEmbeddingExtractor)
 	handler.SetJobReconciler(jobReconciler)
+	if err := api.FailInterruptedVisuals(database.DB); err != nil {
+		logger.Warn("Could not reconcile interrupted visuals builds", "error", err)
+	}
 
 	autoSummarizer := summary.NewAutoSummarizer(summaryRepo, jobRepo, speakerMappingRepo, handler.LLMService)
 	taskQueue.SetAfterCompletion(func(ctx context.Context, jobID string) {

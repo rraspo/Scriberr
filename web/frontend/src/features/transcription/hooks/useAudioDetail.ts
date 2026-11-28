@@ -64,6 +64,7 @@ export interface AudioFile {
     profile_name?: string;
     source_kind?: string;
     source_label?: string;
+    visuals_status?: "pending" | "ready" | "failed";
     execution_path?: ExecutionPath;
     execution_reason?: string;
     is_multi_track?: boolean;

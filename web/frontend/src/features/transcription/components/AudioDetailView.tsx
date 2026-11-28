@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
 import { sourceAppearance, sourceLinkLabel } from "@/features/transcription/sourceAppearance";
 import { SourceCaption } from "@/features/transcription/components/SourceCaption";
+import { JobVisualsSection } from "@/features/transcription/components/JobVisualsSection";
 import { languageName } from "@/lib/languageName";
 import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, MessageCircle, FileJson, Clock, AlertCircle, Users, Copy, Hash, Link2, Languages, ExternalLink } from "lucide-react";
 import { SplitButton } from "@/components/ui/split-button";
@@ -290,6 +291,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                         )}
                                                     </div>
                                                     {audioFile.source_description && <SourceCaption caption={audioFile.source_description} />}
+                                                    {audioFile.visuals_status && <JobVisualsSection jobId={audioFile.id} visualsStatus={audioFile.visuals_status} />}
                                                     </>
                                                 );
                                             })()}

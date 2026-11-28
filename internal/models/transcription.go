@@ -26,6 +26,12 @@ type TranscriptionJob struct {
 	ExternalID            *string        `json:"external_id,omitempty" gorm:"type:text;index"`
 	ProfileName           *string        `json:"profile_name,omitempty" gorm:"type:text"`
 	ThumbnailPath         *string        `json:"thumbnail_path,omitempty" gorm:"type:text"`
+	VideoPath             *string        `json:"-" gorm:"type:text"`
+	VisualsStatus         string         `json:"visuals_status,omitempty" gorm:"type:varchar(20)"` // "" none, pending, ready, failed
+	VisualsError          *string        `json:"visuals_error,omitempty" gorm:"type:text"`
+	VideoDurationSeconds  *float64       `json:"-"`
+	Frames                []JobFrame     `json:"-" gorm:"serializer:json;type:text"`
+	Sheets                []JobSheet     `json:"-" gorm:"serializer:json;type:text"`
 	SourceKind            string         `json:"source_kind,omitempty" gorm:"-"`
 	SourceLabel           string         `json:"source_label,omitempty" gorm:"-"`
 	IsMultiTrack          bool           `json:"is_multi_track" gorm:"type:boolean;default:false"`
@@ -415,4 +421,37 @@ type MultiTrackFile struct {
 
 	// Relationships
 	TranscriptionJob TranscriptionJob `json:"transcription_job,omitempty" gorm:"foreignKey:TranscriptionJobID;constraint:OnDelete:CASCADE"`
+}
+
+// Visuals build states of a job's video frames and contact sheets.
+const (
+	VisualsPending = "pending"
+	VisualsReady   = "ready"
+	VisualsFailed  = "failed"
+)
+
+// JobFrame is one extracted video frame.
+type JobFrame struct {
+	Index            int     `json:"index"`
+	TimestampSeconds float64 `json:"timestamp_seconds"`
+	URL              string  `json:"url"`
+}
+
+// JobSheet is one contact sheet: up to twelve consecutive frames tiled in
+// one image.
+type JobSheet struct {
+	Index        int     `json:"index"`
+	StartSeconds float64 `json:"start_seconds"`
+	EndSeconds   float64 `json:"end_seconds"`
+	FrameCount   int     `json:"frame_count"`
+	URL          string  `json:"url"`
+	ContentType  string  `json:"content_type"`
+}
+
+// JobVideo describes the video kept with a job.
+type JobVideo struct {
+	URL             string  `json:"url"`
+	ContentType     string  `json:"content_type"`
+	SizeBytes       int64   `json:"size_bytes"`
+	DurationSeconds float64 `json:"duration_seconds"`
 }

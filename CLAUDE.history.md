@@ -1,5 +1,7 @@
 # CLAUDE.history.md — Scriberr fork
 
+- 2026-11-28 — Link imports keep their video and build timestamped frames and contact sheets over the whole video. Owner ask: sessions cannot watch video, and visual reels (Instagram, TikTok) carry content that is not in the audio, so a session reads the frames instead.
+
 - 2026-11-28 — Link imports with no reported language now default to English. They had defaulted to Spanish, and the owner's English reels were transcribed in Spanish. The egress proxy covers only Instagram and TikTok: mission-control kept YouTube off it. The owner saw "YouTube" on an Instagram recording, most likely a cached app shell from the previous build, so the shell is now served no-cache and the page has an explicit "Watch on <source>" link.
 
 - 2026-11-28 — The link import takes Instagram reels and posts and TikTok videos as well as YouTube, and keeps each post's caption. Buzon gets its own idempotent import and status API, and the list gains per-source icons and a source filter. Owner ask: links he shares from his phone become reference material. X stays unsupported because it doesn't download anonymously.

@@ -659,3 +659,11 @@ func (r *refreshTokenRepository) Revoke(ctx context.Context, id uint) error {
 func (r *refreshTokenRepository) RevokeByHash(ctx context.Context, hash string) error {
 	return r.db.WithContext(ctx).Model(&models.RefreshToken{}).Where("hashed = ?", hash).Update("revoked", true).Error
 }
+
+// UpdateVisuals writes only a job's visuals columns, so a background build
+// never overwrites the status a transcription worker saved meanwhile.
+func (r *jobRepository) UpdateVisuals(ctx context.Context, job *models.TranscriptionJob) error {
+	return r.db.WithContext(ctx).Model(&models.TranscriptionJob{}).Where("id = ?", job.ID).
+		Select("visuals_status", "visuals_error", "video_path", "video_duration_seconds", "frames", "sheets").
+		Updates(job).Error
+}

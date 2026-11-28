@@ -1316,6 +1316,10 @@ func (h *Handler) DeleteTranscriptionJob(c *gin.Context) {
 	if job.ThumbnailPath != nil {
 		_ = h.fileService.RemoveFile(*job.ThumbnailPath)
 	}
+	if job.VideoPath != nil {
+		_ = h.fileService.RemoveFile(*job.VideoPath)
+	}
+	_ = h.fileService.RemoveDirectory(visualsDir(h.config.UploadDir, jobID))
 
 	// Also remove .aup file if exists
 	if job.AupFilePath != nil {
@@ -1335,23 +1339,31 @@ func (h *Handler) DeleteTranscriptionJob(c *gin.Context) {
 
 	// Delete Chat Sessions
 	// We need a method in ChatRepository to delete by JobID or TranscriptionID
-	if err := h.chatRepo.DeleteByJobID(ctx, jobID); err != nil {
+	if h.chatRepo == nil {
+		// Not wired (minimal handlers in tests).
+	} else if err := h.chatRepo.DeleteByJobID(ctx, jobID); err != nil {
 		// Log error but continue? Or fail? Best to try to clean up as much as possible.
 		fmt.Printf("Failed to delete chat sessions for job %s: %v\n", jobID, err)
 	}
 
 	// Delete Notes
-	if err := h.noteRepo.DeleteByTranscriptionID(ctx, jobID); err != nil {
+	if h.noteRepo == nil {
+		// Not wired (minimal handlers in tests).
+	} else if err := h.noteRepo.DeleteByTranscriptionID(ctx, jobID); err != nil {
 		fmt.Printf("Failed to delete notes for job %s: %v\n", jobID, err)
 	}
 
 	// Delete Summaries
-	if err := h.summaryRepo.DeleteByTranscriptionID(ctx, jobID); err != nil {
+	if h.summaryRepo == nil {
+		// Not wired (minimal handlers in tests).
+	} else if err := h.summaryRepo.DeleteByTranscriptionID(ctx, jobID); err != nil {
 		fmt.Printf("Failed to delete summaries for job %s: %v\n", jobID, err)
 	}
 
 	// Delete Speaker Mappings
-	if err := h.speakerMappingRepo.DeleteByJobID(ctx, jobID); err != nil {
+	if h.speakerMappingRepo == nil {
+		// Not wired (minimal handlers in tests).
+	} else if err := h.speakerMappingRepo.DeleteByJobID(ctx, jobID); err != nil {
 		fmt.Printf("Failed to delete speaker mappings for job %s: %v\n", jobID, err)
 	}
 

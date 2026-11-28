@@ -315,9 +315,12 @@ func (h *Handler) importLink(ctx context.Context, request linkImportRequest) (*m
 	logger.Info("Starting link download", "source", request.Source, "url", request.URL, "job_id", jobID)
 	downloadStart := time.Now()
 	ytDlpCmd := exec.Command("yt-dlp", withLinkProxy(h.config.LinkImportProxy, request.Source,
+		"-f", linkVideoFormat,
+		"-k", // keep the video beside the extracted audio
 		"--extract-audio",
 		"--audio-format", "mp3",
 		"--audio-quality", "0", // best quality
+		"--merge-output-format", "mp4",
 		"--output", filePath,
 		"--no-playlist",
 		request.URL,
@@ -343,13 +346,24 @@ func (h *Handler) importLink(ctx context.Context, request linkImportRequest) (*m
 		}
 	}
 
-	// Find the actual downloaded file (yt-dlp changes the extension)
+	// Find the actual downloaded files (yt-dlp changes the extension): the
+	// extracted audio is transcribed, the video is kept for its frames.
 	matches, err := filepath.Glob(filepath.Join(uploadDir, jobID+".*"))
 	if err != nil || len(matches) == 0 {
 		removePartials()
 		return nil, &linkFailure{http.StatusInternalServerError, "download_failed", "Downloaded file not found"}
 	}
-	actualFilePath := matches[0]
+	actualFilePath, videoPath := downloadedFiles(uploadDir, jobID)
+	if actualFilePath == "" {
+		if noAudio && videoPath != "" {
+			actualFilePath = videoPath
+		} else {
+			actualFilePath = matches[0]
+		}
+	}
+	if videoPath == actualFilePath && !noAudio {
+		videoPath = ""
+	}
 	if fileInfo, statErr := os.Stat(actualFilePath); statErr == nil {
 		logger.Info("Link download completed",
 			"url", request.URL,
@@ -391,6 +405,10 @@ func (h *Handler) importLink(ctx context.Context, request linkImportRequest) (*m
 	if request.Source == sourceYouTube {
 		job.ThumbnailPath = h.saveYouTubeThumbnail(ctx, uploadDir, jobID, videoID)
 	}
+	if videoPath != "" {
+		job.VideoPath = &videoPath
+		job.VisualsStatus = models.VisualsPending
+	}
 	if noAudio {
 		reason := noAudioTrackMessage
 		job.Status = models.StatusFailed
@@ -413,6 +431,10 @@ func (h *Handler) importLink(ctx context.Context, request linkImportRequest) (*m
 			job.ErrorMessage = &reason
 			_ = h.jobRepo.Update(ctx, &job)
 		}
+	}
+
+	if videoPath != "" {
+		h.startVisualsBuild(ctx, jobID, videoPath, false)
 	}
 
 	applySourceDescription(&job)
@@ -530,6 +552,8 @@ type linkImportResponse struct {
 	ProfileName   string  `json:"profile_name"`
 	RecordingPath string  `json:"recording_path"`
 	Error         *string `json:"error"`
+	VisualsStatus string  `json:"visuals_status"`
+	VisualsURL    string  `json:"visuals_url"`
 }
 
 func newLinkImportResponse(job *models.TranscriptionJob) linkImportResponse {
@@ -539,6 +563,11 @@ func newLinkImportResponse(job *models.TranscriptionJob) linkImportResponse {
 		Source:        job.Source,
 		RecordingPath: "/audio/" + job.ID,
 		Error:         job.ErrorMessage,
+		VisualsStatus: "none",
+		VisualsURL:    "/api/v1/transcription/" + job.ID + "/visuals",
+	}
+	if job.VisualsStatus != "" {
+		body.VisualsStatus = job.VisualsStatus
 	}
 	if job.Title != nil {
 		body.Title = *job.Title
