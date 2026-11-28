@@ -35,6 +35,7 @@ previous=""
 for argument in "$@"; do
   if [ "$argument" = "--dump-json" ] || [ "$argument" = "-j" ]; then
     case "$mode" in
+      tt_es) echo '{"id":"7000000000000000001","title":"Tres prompts","description":"Tres prompts","channel":"Creator Display","uploader":"creator","duration":30,"language":"es"}' ;;
       tt) echo '{"id":"7000000000000000001","title":"Three prompts that save me an hour","description":"Three prompts that save me an hour #ai","channel":"Creator Display","uploader":"creator","duration":30,"language":"en"}' ;;
       *) printf '%s\n' '{"id":"ABC123xyz","title":"Video by creator.handle","description":"Three AI tools I use every day\n\n1. A note taker\n#ai #tools","channel":"creator.handle","uploader":"Creator Name","duration":null,"language":null,"thumbnail":"https://cdn.example.com/thumb.jpg"}' ;;
     esac
@@ -124,7 +125,7 @@ func TestLinkImportQueuesAnInstagramReelWithItsCaption(t *testing.T) {
 	require.NotEmpty(t, body.JobID)
 	require.Equal(t, "pending", body.Status)
 	require.Equal(t, "instagram", body.Source)
-	require.Equal(t, "4090 Spanish", body.ProfileName, "no language from Instagram means Spanish")
+	require.Equal(t, "4090 English", body.ProfileName, "no language from Instagram means English")
 	require.Equal(t, "/audio/"+body.JobID, body.RecordingPath)
 	// Instagram's own title is "Video by <handle>"; the caption's first line says more.
 	require.Equal(t, "Three AI tools I use every day", body.Title)
@@ -137,7 +138,7 @@ func TestLinkImportQueuesAnInstagramReelWithItsCaption(t *testing.T) {
 	require.Equal(t, "@creator.handle", *stored.SourceChannel)
 	require.Equal(t, "Three AI tools I use every day\n\n1. A note taker\n#ai #tools", *stored.SourceDescription)
 	require.Equal(t, "wamid.example:0", *stored.ExternalID)
-	require.Equal(t, "es", *stored.Parameters.Language)
+	require.Equal(t, "en", *stored.Parameters.Language)
 	require.True(t, strings.HasPrefix(stored.AudioPath, uploadDir))
 	require.FileExists(t, stored.AudioPath)
 	require.Nil(t, stored.ThumbnailPath, "only YouTube thumbnails are fetched")
@@ -272,14 +273,25 @@ func TestLinkImportKeepsTheCaptionOfAReelWithoutAudio(t *testing.T) {
 	require.Equal(t, "Three AI tools I use every day\n\n1. A note taker\n#ai #tools", *stored.SourceDescription)
 }
 
-func TestLinkImportFallsBackToEnglishWhenThereIsNoSpanishProfile(t *testing.T) {
+func TestLinkImportFallsBackToSpanishWhenThereIsNoEnglishProfile(t *testing.T) {
 	installFakeSocialYtDlp(t, "ig")
 	handler, db, _ := newYouTubeTestHandler(t)
-	createLanguageProfile(t, db, "gpu-en", "4090 English", "en", true, false)
+	createLanguageProfile(t, db, "gpu-es", "4090 Spanish", "es", true, false)
 
 	response := performLinkImport(t, handler, map[string]any{"url": "https://www.instagram.com/reel/ABC123xyz/"})
 	require.Equal(t, http.StatusCreated, response.Code, response.Body.String())
-	require.Equal(t, "4090 English", decodeLinkImport(t, response).ProfileName)
+	require.Equal(t, "4090 Spanish", decodeLinkImport(t, response).ProfileName)
+}
+
+// A reported language still wins over the English default.
+func TestLinkImportUsesTheReportedLanguageBeforeEnglish(t *testing.T) {
+	installFakeSocialYtDlp(t, "tt_es")
+	handler, db, _ := newYouTubeTestHandler(t)
+	createHouseProfiles(t, db)
+
+	response := performLinkImport(t, handler, map[string]any{"url": "https://www.tiktok.com/@creator/video/7000000000000000001"})
+	require.Equal(t, http.StatusCreated, response.Code, response.Body.String())
+	require.Equal(t, "4090 Spanish", decodeLinkImport(t, response).ProfileName)
 }
 
 func TestLinkImportWithoutAnyUsableProfile(t *testing.T) {
@@ -337,16 +349,16 @@ func TestDialogImportTakesAnInstagramLink(t *testing.T) {
 	require.Equal(t, "@creator.handle", *stored.SourceChannel)
 }
 
-func TestDialogPreviewSuggestsSpanishForAnInstagramReel(t *testing.T) {
+func TestDialogPreviewSuggestsEnglishForAnInstagramReel(t *testing.T) {
 	installFakeSocialYtDlp(t, "ig")
 	handler, db, _ := newYouTubeTestHandler(t)
-	spanish, _ := createHouseProfiles(t, db)
+	_, english := createHouseProfiles(t, db)
 
 	preview := decodePreview(t, performPreviewRequest(t, handler, "https://www.instagram.com/reel/ABC123xyz/"))
 	require.Equal(t, "Three AI tools I use every day", preview.Title)
 	require.Equal(t, "@creator.handle", *preview.Channel)
 	require.NotNil(t, preview.SuggestedProfileID)
-	require.Equal(t, spanish.ID, *preview.SuggestedProfileID)
+	require.Equal(t, english.ID, *preview.SuggestedProfileID)
 }
 
 func TestDescribeSourceForSocialLinks(t *testing.T) {

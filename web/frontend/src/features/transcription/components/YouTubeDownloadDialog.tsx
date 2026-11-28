@@ -99,7 +99,7 @@ export function YouTubeDownloadDialog({
 
     try {
       const job = await downloadYouTube({ url, title, profileId });
-      const jobTitle = job.title || "The video";
+      const jobTitle = job.title || "The recording";
       if (job.status === "pending") {
         setQueuedTitle(jobTitle);
         setSuccess(true);

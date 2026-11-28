@@ -185,9 +185,10 @@ run would otherwise overwrite the restart's status.
 X/Twitter is not supported: its videos do not download anonymously.
 Metadata comes from one `yt-dlp --dump-json --skip-download` call (null or
 `NA` fields count as absent). When `LINK_IMPORT_PROXY` is set, every yt-dlp
-call of a link import (metadata, preview, download) gets `--proxy <url>`;
-nothing else uses it (thumbnails stay direct), and the URL is never logged
-because it may carry credentials. Instagram and TikTok are fetched anonymously;
+call (metadata, preview, download) for an Instagram or TikTok link gets
+`--proxy <url>`. YouTube links and everything else (thumbnails included) stay
+direct, because the egress proxy forwards only Instagram and TikTok hosts. The
+URL is never logged because it may carry credentials. Instagram and TikTok are fetched anonymously;
 no cookies are configured. For those two, `source_channel` is the author's
 `@handle` (Instagram's `channel`, TikTok's `uploader`), the caption is stored
 as `source_description`, and an Instagram job is titled with the caption's
@@ -200,7 +201,7 @@ Thumbnails are fetched only for YouTube.
 
 `POST /api/v1/transcription/links` is the automated callers' import (Buzon):
 `{url, external_id?, profile_id?}`; without `profile_id` the profile comes
-from the post's language, else Spanish, else English (500 `no_profile`, after
+from the post's language, else English, else Spanish (500 `no_profile`, after
 the metadata call only). A repeated `external_id` returns the existing job
 with 200 and runs nothing; a new job answers 201. Both return
 `{job_id, status, title, source, profile_name, recording_path, error}`, with
@@ -210,9 +211,14 @@ with 200 and runs nothing; a new job answers 201. Both return
 `not_found`). The download still runs inside the request.
 
 The dialog endpoints below take every supported link (unsupported ones are
-400 `invalid_url`); the preview's profile suggestion falls back to Spanish,
-then English, for Instagram and TikTok, while YouTube keeps the no-language,
-no-suggestion rule.
+400 `invalid_url`); the preview's profile suggestion falls back to English,
+then Spanish, for Instagram and TikTok, while YouTube keeps the no-language,
+no-suggestion rule. Caption-language detection is deliberately not used:
+captions are short and full of hashtags and handles. The recording page shows
+a "Watch on <YouTube|Instagram|TikTok>" link (`sourceLinkLabel`) beside the
+source label. The app shell (`index.html`, `sw.js`, `registerSW.js`, the web
+manifest) is served with `Cache-Control: no-cache`; a cached shell or service
+worker keeps a phone on the previous deploy's bundle.
 
 `POST /api/v1/transcription/youtube/preview` returns title, channel, duration,
 the language as YouTube reports it, yt-dlp's thumbnail URL (the dialog loads

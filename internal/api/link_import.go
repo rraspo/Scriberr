@@ -80,9 +80,11 @@ type linkMetadata struct {
 	ThumbnailURL    string
 }
 
-// withLinkProxy prepends yt-dlp's --proxy flag when a link-import proxy is set.
-func withLinkProxy(proxy string, args ...string) []string {
-	if proxy == "" {
+// withLinkProxy prepends yt-dlp's --proxy flag when a link-import proxy is set
+// and the link's source is one the proxy serves. The egress proxy forwards
+// only Instagram and TikTok hosts, so YouTube always goes direct.
+func withLinkProxy(proxy, source string, args ...string) []string {
+	if proxy == "" || (source != sourceInstagram && source != sourceTikTok) {
 		return args
 	}
 	return append([]string{"--proxy", proxy}, args...)
@@ -91,7 +93,7 @@ func withLinkProxy(proxy string, args ...string) []string {
 // fetchLinkMetadata asks yt-dlp for a post's info without downloading it. On
 // failure it returns yt-dlp's stderr for classification.
 func fetchLinkMetadata(link, source, proxy string) (*linkMetadata, string, error) {
-	cmd := exec.Command("yt-dlp", withLinkProxy(proxy, "--dump-json", "--skip-download", "--no-playlist", link)...)
+	cmd := exec.Command("yt-dlp", withLinkProxy(proxy, source, "--dump-json", "--skip-download", "--no-playlist", link)...)
 	var out, stderr bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
@@ -233,17 +235,17 @@ func classifyLinkFailure(source, stderr string) linkFailure {
 }
 
 // suggestProfileWithFallback prefers the profile for the post's language,
-// then Spanish, then English.
+// then English, then Spanish.
 func suggestProfileWithFallback(profiles []models.TranscriptionProfile, language *string) *string {
 	if language != nil {
 		if suggestion := suggestProfileForLanguage(profiles, *language); suggestion != nil {
 			return suggestion
 		}
 	}
-	if suggestion := suggestProfileForLanguage(profiles, "es"); suggestion != nil {
+	if suggestion := suggestProfileForLanguage(profiles, "en"); suggestion != nil {
 		return suggestion
 	}
-	return suggestProfileForLanguage(profiles, "en")
+	return suggestProfileForLanguage(profiles, "es")
 }
 
 // linkImportRequest is one import. Profile is nil when the profile is to be
@@ -312,7 +314,7 @@ func (h *Handler) importLink(ctx context.Context, request linkImportRequest) (*m
 
 	logger.Info("Starting link download", "source", request.Source, "url", request.URL, "job_id", jobID)
 	downloadStart := time.Now()
-	ytDlpCmd := exec.Command("yt-dlp", withLinkProxy(h.config.LinkImportProxy,
+	ytDlpCmd := exec.Command("yt-dlp", withLinkProxy(h.config.LinkImportProxy, request.Source,
 		"--extract-audio",
 		"--audio-format", "mp3",
 		"--audio-quality", "0", // best quality

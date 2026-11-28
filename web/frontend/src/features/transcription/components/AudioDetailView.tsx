@@ -1,10 +1,10 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
-import { sourceAppearance } from "@/features/transcription/sourceAppearance";
+import { sourceAppearance, sourceLinkLabel } from "@/features/transcription/sourceAppearance";
 import { SourceCaption } from "@/features/transcription/components/SourceCaption";
 import { languageName } from "@/lib/languageName";
-import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, MessageCircle, FileJson, Clock, AlertCircle, Users, Copy, Hash, Link2, Languages } from "lucide-react";
+import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, MessageCircle, FileJson, Clock, AlertCircle, Users, Copy, Hash, Link2, Languages, ExternalLink } from "lucide-react";
 import { SplitButton } from "@/components/ui/split-button";
 import { useToast } from "@/components/ui/toast";
 import { Header } from "@/components/Header";
@@ -267,18 +267,18 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                                 <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-md", tintClasses)}>
                                                                     <SourceIcon className="h-3.5 w-3.5" />
                                                                 </span>
-                                                                {hasSourceLink ? (
+                                                                <span className="min-w-0 break-words">{audioFile.source_label}</span>
+                                                                {hasSourceLink && (
                                                                     <a
                                                                         href={audioFile.source_url}
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
-                                                                        aria-label={`Open the original post on ${audioFile.source_label}`}
-                                                                        className="truncate underline-offset-2 hover:underline hover:text-[var(--text-primary)] transition-colors"
+                                                                        aria-label={sourceLinkLabel(audioFile.source_kind)}
+                                                                        className="inline-flex items-center gap-1 text-[var(--text-tertiary)] underline-offset-2 hover:underline hover:text-primary transition-colors"
                                                                     >
-                                                                        {audioFile.source_label}
+                                                                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                                                                        {sourceLinkLabel(audioFile.source_kind)}
                                                                     </a>
-                                                                ) : (
-                                                                    <span className="truncate">{audioFile.source_label}</span>
                                                                 )}
                                                             </span>
                                                         )}

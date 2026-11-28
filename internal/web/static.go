@@ -128,6 +128,10 @@ func SetupStaticRoutes(router *gin.Engine, authService *auth.AuthService) {
 				contentType = "text/html; charset=utf-8"
 			}
 
+			if path == "sw.js" || path == "registerSW.js" || path == "manifest.webmanifest" || strings.HasSuffix(path, ".html") {
+				// A cached shell or service worker keeps a phone on the previous deploy's bundle.
+				c.Header("Cache-Control", "no-cache")
+			}
 			c.Data(http.StatusOK, contentType, fileContent)
 			return
 		}
@@ -140,6 +144,8 @@ func SetupStaticRoutes(router *gin.Engine, authService *auth.AuthService) {
 			return
 		}
 
+		// A cached shell keeps a phone on the previous deploy's bundle.
+		c.Header("Cache-Control", "no-cache")
 		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 	})
 }

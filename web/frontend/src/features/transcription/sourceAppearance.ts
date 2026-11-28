@@ -36,3 +36,15 @@ const appearances: Record<string, SourceAppearance> = {
 export function sourceAppearance(kind?: string): SourceAppearance {
     return (kind && appearances[kind]) || appearances.upload;
 }
+
+// Name of the site a source link opens, for "Watch on ..." links.
+const sourceNames: Record<string, string> = {
+    youtube: "YouTube",
+    instagram: "Instagram",
+    tiktok: "TikTok",
+};
+
+export function sourceLinkLabel(kind?: string): string {
+    const name = kind ? sourceNames[kind] : undefined;
+    return name ? `Watch on ${name}` : "Open original";
+}
