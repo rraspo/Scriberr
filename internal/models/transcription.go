@@ -22,6 +22,8 @@ type TranscriptionJob struct {
 	Source                string         `json:"source" gorm:"type:varchar(20);not null;default:'manual'"` // e.g., "manual", "omi"
 	SourceURL             *string        `json:"source_url,omitempty" gorm:"type:text"`
 	SourceChannel         *string        `json:"source_channel,omitempty" gorm:"type:text"`
+	SourceDescription     *string        `json:"source_description,omitempty" gorm:"type:text"`
+	ExternalID            *string        `json:"external_id,omitempty" gorm:"type:text;index"`
 	ProfileName           *string        `json:"profile_name,omitempty" gorm:"type:text"`
 	ThumbnailPath         *string        `json:"thumbnail_path,omitempty" gorm:"type:text"`
 	SourceKind            string         `json:"source_kind,omitempty" gorm:"-"`

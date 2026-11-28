@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { languageName } from "@/lib/languageName";
-import { Youtube, Download, AlertCircle, CheckCircle, AlertTriangle } from "lucide-react";
+import { Link2, Download, AlertCircle, CheckCircle, AlertTriangle } from "lucide-react";
 import { useYouTubeDownload, useYouTubePreview, useTranscriptionProfiles } from "@/features/transcription/hooks/useAudioFiles";
 
 interface YouTubeDownloadDialogProps {
@@ -26,8 +26,16 @@ interface YouTubeDownloadDialogProps {
   onDownloadComplete?: () => void;
 }
 
-function validateYouTubeUrl(value: string): boolean {
-  return value.includes("youtube.com") || value.includes("youtu.be");
+const SUPPORTED_LINK = [
+  /^https?:\/\/(www\.|m\.|music\.)?youtube\.com\//i,
+  /^https?:\/\/youtu\.be\//i,
+  /^https?:\/\/(www\.)?instagram\.com\/(reel|reels|p)\/[\w-]+\/?(\?.*)?$/i,
+  /^https?:\/\/(www\.|m\.)?tiktok\.com\/@[^/]+\/video\/\d+\/?(\?.*)?$/i,
+  /^https?:\/\/(vm|vt)\.tiktok\.com\/[\w-]+\/?(\?.*)?$/i,
+];
+
+function validateLink(value: string): boolean {
+  return SUPPORTED_LINK.some((pattern) => pattern.test(value.trim()));
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -59,12 +67,12 @@ export function YouTubeDownloadDialog({
     return () => clearTimeout(handle);
   }, [url]);
 
-  const urlLooksValid = validateYouTubeUrl(debouncedUrl);
+  const urlLooksValid = validateLink(debouncedUrl);
   const preview = useYouTubePreview(debouncedUrl, isOpen && urlLooksValid);
   const previewData = urlLooksValid ? preview.data : undefined;
   const previewLoading = urlLooksValid && (url.trim() !== debouncedUrl || preview.isFetching);
   const previewError = urlLooksValid && url.trim() === debouncedUrl && preview.isError
-    ? (preview.error instanceof Error ? preview.error.message : "Could not look up the video.")
+    ? (preview.error instanceof Error ? preview.error.message : "Could not look up the link.")
     : null;
   const profileId = chosenProfileId ?? previewData?.suggested_profile_id ?? "";
   const canSubmit = Boolean(previewData) && !previewLoading && Boolean(profileId) && !isDownloading;
@@ -73,12 +81,12 @@ export function YouTubeDownloadDialog({
     e.preventDefault();
 
     if (!url.trim()) {
-      setError("Please enter a YouTube URL");
+      setError("Please enter a link");
       return;
     }
 
-    if (!validateYouTubeUrl(url)) {
-      setError("Please enter a valid YouTube URL");
+    if (!validateLink(url)) {
+      setError("Please enter a YouTube, Instagram or TikTok link");
       return;
     }
 
@@ -128,11 +136,11 @@ export function YouTubeDownloadDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Youtube className="h-5 w-5 text-[var(--error)]" />
-            Download from YouTube
+            <Link2 className="h-5 w-5 text-[var(--brand-solid)]" />
+            Import a link
           </DialogTitle>
           <DialogDescription>
-            Enter a YouTube video URL to download its audio for transcription
+            Paste a YouTube, Instagram or TikTok link to download its audio for transcription
           </DialogDescription>
         </DialogHeader>
 
@@ -175,11 +183,11 @@ export function YouTubeDownloadDialog({
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="youtube-url">YouTube URL</Label>
+              <Label htmlFor="youtube-url">Link</Label>
               <Input
                 id="youtube-url"
                 type="url"
-                placeholder="https://www.youtube.com/watch?v=..."
+                placeholder="YouTube, Instagram or TikTok link"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 disabled={isDownloading}
@@ -192,7 +200,7 @@ export function YouTubeDownloadDialog({
                     <div className="h-4 w-3/4 rounded bg-gray-200 dark:bg-gray-700 motion-safe:animate-pulse" />
                     <div className="h-3.5 w-1/2 rounded bg-gray-200 dark:bg-gray-700 motion-safe:animate-pulse" />
                     <div className="h-3.5 w-1/3 rounded bg-gray-200 dark:bg-gray-700 motion-safe:animate-pulse" />
-                    <p className="text-sm text-[var(--text-secondary)]">Looking up the video...</p>
+                    <p className="text-sm text-[var(--text-secondary)]">Looking up the link...</p>
                   </div>
                 </div>
               )}
@@ -225,7 +233,7 @@ export function YouTubeDownloadDialog({
                     <p className="text-sm text-[var(--text-secondary)]">
                       {previewData.language
                         ? `${languageName(previewData.language)} (${previewData.language})`
-                        : "Language not reported by YouTube"}
+                        : "Language not reported"}
                     </p>
                   </div>
                 </div>
@@ -250,8 +258,8 @@ export function YouTubeDownloadDialog({
                 {!previewData.suggested_profile_id && !chosenProfileId && (
                   <p className="text-xs text-[var(--text-tertiary)]">
                     {previewData.language
-                      ? "No profile matches the language YouTube reported. Choose one."
-                      : "YouTube reported no matching language. Choose a profile."}
+                      ? "No profile matches the reported language. Choose one."
+                      : "No language was reported. Choose a profile."}
                   </p>
                 )}
               </div>
@@ -262,13 +270,13 @@ export function YouTubeDownloadDialog({
               <Input
                 id="custom-title"
                 type="text"
-                placeholder="Leave empty to use video title"
+                placeholder="Leave empty to use the post title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 disabled={isDownloading}
               />
               <p className="text-xs text-[var(--text-tertiary)]">
-                If left empty, the video's title will be used automatically
+                If left empty, the post's title will be used automatically
               </p>
             </div>
 

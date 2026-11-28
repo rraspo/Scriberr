@@ -90,6 +90,15 @@ func (r *jobRepository) FindWithAssociations(ctx context.Context, id string) (*m
 	return &job, nil
 }
 
+// FindByExternalID returns the job an automated caller created under its own id.
+func (r *jobRepository) FindByExternalID(ctx context.Context, externalID string) (*models.TranscriptionJob, error) {
+	var job models.TranscriptionJob
+	if err := r.db.WithContext(ctx).Where("external_id = ?", externalID).First(&job).Error; err != nil {
+		return nil, err
+	}
+	return &job, nil
+}
+
 func (r *jobRepository) ListWithParams(ctx context.Context, offset, limit int, sortBy, sortOrder, searchQuery, sourceFilter string, updatedAfter *time.Time) ([]models.TranscriptionJob, int64, error) {
 	var jobs []models.TranscriptionJob
 	var count int64
@@ -108,7 +117,10 @@ func (r *jobRepository) ListWithParams(ctx context.Context, offset, limit int, s
 	}
 
 	// Apply source filter
-	if sourceFilter != "" {
+	// "upload" is everything that did not come from a named intake.
+	if sourceFilter == "upload" {
+		db = db.Where("source NOT IN ?", []string{"youtube", "instagram", "tiktok", "whatsapp", "plaud", "omi"})
+	} else if sourceFilter != "" {
 		db = db.Where("source = ?", sourceFilter)
 	}
 

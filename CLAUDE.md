@@ -175,12 +175,41 @@ amber "Slow path · CPU" badge so a long run never reads as a hang.
 Starting a job whose previous run is still stopping returns 409; the stopping
 run would otherwise overwrite the restart's status.
 
-## YouTube links
+## Link import (YouTube, Instagram, TikTok)
 
-Links are accepted only over http(s) on `youtube.com`,
-`www.`/`m.`/`music.youtube.com` or `youtu.be`. Metadata comes from one
-`yt-dlp --dump-json --skip-download` call (null or `NA` fields count as
-absent).
+`linkSource` (`internal/api/link_import.go`) accepts only http(s) links on
+`youtube.com`, `www.`/`m.`/`music.youtube.com` or `youtu.be` (source
+`youtube`); `instagram.com`/`www.instagram.com` paths `/reel/<id>`,
+`/reels/<id>`, `/p/<id>` (source `instagram`); `tiktok.com`/`www.`/`m.` paths
+`/@<user>/video/<digits>` and `vm.`/`vt.tiktok.com/<code>` (source `tiktok`).
+X/Twitter is not supported: its videos do not download anonymously.
+Metadata comes from one `yt-dlp --dump-json --skip-download` call (null or
+`NA` fields count as absent). Instagram and TikTok are fetched anonymously;
+no cookies are configured. For those two, `source_channel` is the author's
+`@handle` (Instagram's `channel`, TikTok's `uploader`), the caption is stored
+as `source_description`, and an Instagram job is titled with the caption's
+first line (Instagram's own title is "Video by <handle>"). Failures are
+classified per source: Instagram adds `instagram_login_required` (502), and
+both add `rate_limited` (502, Instagram answers 429 after a few quick
+anonymous requests). A post whose download has no audio track is still
+stored, as a failed job with its caption and the reason, and is not queued.
+Thumbnails are fetched only for YouTube.
+
+`POST /api/v1/transcription/links` is the automated callers' import (Buzon):
+`{url, external_id?, profile_id?}`; without `profile_id` the profile comes
+from the post's language, else Spanish, else English (500 `no_profile`, after
+the metadata call only). A repeated `external_id` returns the existing job
+with 200 and runs nothing; a new job answers 201. Both return
+`{job_id, status, title, source, profile_name, recording_path, error}`, with
+`error` always present (null when none); unsupported links are 400
+`unsupported_url`, a body without `url` 400 `invalid_request`.
+`GET /api/v1/transcription/links/:id` returns the same body (404
+`not_found`). The download still runs inside the request.
+
+The dialog endpoints below take every supported link (unsupported ones are
+400 `invalid_url`); the preview's profile suggestion falls back to Spanish,
+then English, for Instagram and TikTok, while YouTube keeps the no-language,
+no-suggestion rule.
 
 `POST /api/v1/transcription/youtube/preview` returns title, channel, duration,
 the language as YouTube reports it, yt-dlp's thumbnail URL (the dialog loads
@@ -219,8 +248,11 @@ non-persisted `source_kind` and `source_label`. `describeSource`
 already carries: `source`, title patterns (Android call recordings `Call
 <contact>_YYMMDD_HHMMSS`, phone voice-recorder `.m4a` files `<name>
 YYMMDD_HHMMSS`, `WhatsApp Ptt`/`WhatsApp Audio`, `Omi `), the audio extension,
-`source_channel` and `is_multi_track`. Kinds are youtube, plaud, whatsapp, call,
-voice_memo, omi, video, multitrack and upload. WhatsApp keeps one plain label:
+`source_channel` and `is_multi_track`. Kinds are youtube, instagram, tiktok,
+plaud, whatsapp, call, voice_memo, omi, video, multitrack and upload. The list
+has a source filter (`source=<value>`, an exact match, except `upload`, which
+is every source outside youtube, instagram, tiktok, whatsapp, plaud and omi),
+and the recording page shows a post's caption under its source header. WhatsApp keeps one plain label:
 a forwarded audio cannot be told apart from a voice note, and the sender is not
 captured because forwards would make it wrong. Video uploads are stored with
 `source` `video` unless the form names a source. `sourceAppearance.ts` maps each kind to

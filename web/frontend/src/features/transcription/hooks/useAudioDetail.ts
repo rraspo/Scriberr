@@ -59,6 +59,8 @@ export interface AudioFile {
     diarization?: boolean;
     source_url?: string;
     source_channel?: string;
+    source_description?: string;
+    external_id?: string;
     profile_name?: string;
     source_kind?: string;
     source_label?: string;

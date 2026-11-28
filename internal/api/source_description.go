@@ -33,6 +33,10 @@ func describeSource(job models.TranscriptionJob) SourceDescription {
 			return SourceDescription{"youtube", *job.SourceChannel + " · YouTube"}
 		}
 		return SourceDescription{"youtube", "YouTube"}
+	case job.Source == sourceInstagram:
+		return describeSocial("instagram", "Instagram", job)
+	case job.Source == sourceTikTok:
+		return describeSocial("tiktok", "TikTok", job)
 	case job.Source == "plaud":
 		return SourceDescription{"plaud", "Plaud"}
 	case job.Source == "whatsapp" || strings.HasPrefix(title, "WhatsApp Ptt") || strings.HasPrefix(title, "WhatsApp Audio"):
@@ -61,4 +65,12 @@ func applySourceDescription(job *models.TranscriptionJob) {
 	description := describeSource(*job)
 	job.SourceKind = description.Kind
 	job.SourceLabel = description.Label
+}
+
+// describeSocial labels an Instagram or TikTok job with its author handle.
+func describeSocial(kind, name string, job models.TranscriptionJob) SourceDescription {
+	if job.SourceChannel != nil && *job.SourceChannel != "" {
+		return SourceDescription{kind, *job.SourceChannel + " · " + name}
+	}
+	return SourceDescription{kind, name}
 }

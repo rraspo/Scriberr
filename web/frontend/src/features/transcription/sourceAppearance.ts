@@ -1,10 +1,12 @@
 import {
     CircleDot,
     FileAudio,
+    Instagram,
     Layers,
     MessageCircle,
     Mic,
     MonitorPlay,
+    Music2,
     PhoneCall,
     Smartphone,
     Video,
@@ -18,6 +20,8 @@ export interface SourceAppearance {
 
 const appearances: Record<string, SourceAppearance> = {
     youtube: { icon: MonitorPlay, tintClasses: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400" },
+    instagram: { icon: Instagram, tintClasses: "bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-950 dark:text-fuchsia-400" },
+    tiktok: { icon: Music2, tintClasses: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
     plaud: { icon: Mic, tintClasses: "bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-400" },
     call: { icon: PhoneCall, tintClasses: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400" },
     voice_memo: { icon: Smartphone, tintClasses: "bg-sky-50 text-sky-600 dark:bg-sky-950 dark:text-sky-400" },

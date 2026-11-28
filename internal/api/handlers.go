@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -10,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -2670,240 +2668,6 @@ func (h *Handler) GetQuickTranscriptionStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, job)
 }
 
-// @Summary Download audio from YouTube URL
-// @Description Download audio from a YouTube video URL and prepare it for transcription
-// @Tags transcription
-// @Accept json
-// @Produce json
-// @Param request body YouTubeDownloadRequest true "YouTube download request"
-// @Success 200 {object} models.TranscriptionJob
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /api/v1/transcription/youtube [post]
-// @Security ApiKeyAuth
-// @Security BearerAuth
-func (h *Handler) DownloadFromYouTube(c *gin.Context) {
-	var req YouTubeDownloadRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_url"})
-		return
-	}
-
-	// Nothing below depends on the browser still waiting: a finished download
-	// must not be thrown away when the tab closes.
-	ctx := context.WithoutCancel(c.Request.Context())
-
-	req.URL = strings.TrimSpace(req.URL)
-	if !isYouTubeURL(req.URL) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "That is not a YouTube link. Paste a youtube.com or youtu.be URL.", "code": "invalid_url"})
-		return
-	}
-	if strings.TrimSpace(req.ProfileID) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Choose a transcription profile for this video.", "code": "profile_required"})
-		return
-	}
-	profile, err := h.profileRepo.FindByID(ctx, req.ProfileID)
-	if err != nil || profile == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "That transcription profile does not exist.", "code": "unknown_profile"})
-		return
-	}
-
-	// Create upload directory
-	uploadDir := h.config.UploadDir
-	if err := os.MkdirAll(uploadDir, 0755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create upload directory"})
-		return
-	}
-
-	// Generate unique job ID and filename
-	jobID := uuid.New().String()
-	filename := fmt.Sprintf("%s.%%(ext)s", jobID)
-	filePath := filepath.Join(uploadDir, filename)
-
-	// Remove any partial download for this job on every failure path.
-	removePartials := func() {
-		partials, _ := filepath.Glob(filepath.Join(uploadDir, jobID+".*"))
-		for _, partial := range partials {
-			_ = os.Remove(partial)
-		}
-	}
-
-	title := "YouTube Audio"
-	var channel *string
-	var videoID string
-	metadata, metadataStderr, metadataErr := fetchYouTubeMetadata(req.URL)
-	if metadataErr != nil {
-		logger.Warn("Failed to get YouTube metadata", "url", req.URL, "error", metadataErr.Error(), "stderr", metadataStderr)
-		status, code, message := classifyYouTubeFailure(metadataStderr)
-		if code != "download_failed" {
-			c.JSON(status, gin.H{"error": message, "code": code})
-			return
-		}
-	} else {
-		if metadata.Title != "" {
-			title = metadata.Title
-		}
-		channel = metadata.Channel
-		videoID = metadata.ID
-	}
-	if req.Title != nil && *req.Title != "" {
-		title = *req.Title
-	}
-
-	// Download audio using yt-dlp in Python environment
-	logger.Info("Starting YouTube download", "url", req.URL, "job_id", jobID)
-	downloadStart := time.Now()
-
-	// Executing yt-dlp directly (standalone binary)
-	ytDlpCmd := exec.Command("yt-dlp",
-		"--extract-audio",
-		"--audio-format", "mp3",
-		"--audio-quality", "0", // best quality
-		"--output", filePath,
-		"--no-playlist",
-		req.URL,
-	)
-
-	// Execute download and capture stderr for better error messages
-	var stderr bytes.Buffer
-	ytDlpCmd.Stderr = &stderr
-
-	if err := ytDlpCmd.Run(); err != nil {
-		stderrOutput := stderr.String()
-		logger.Error("YouTube download failed",
-			"url", req.URL,
-			"job_id", jobID,
-			"error", err.Error(),
-			"stderr", stderrOutput,
-			"duration", time.Since(downloadStart))
-
-		removePartials()
-		status, code, message := classifyYouTubeFailure(stderrOutput)
-		c.JSON(status, gin.H{"error": message, "code": code})
-		return
-	}
-
-	// Find the actual downloaded file (yt-dlp changes the extension)
-	pattern := fmt.Sprintf("%s.*", jobID)
-	matches, err := filepath.Glob(filepath.Join(uploadDir, pattern))
-	if err != nil || len(matches) == 0 {
-		removePartials()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Downloaded file not found", "code": "download_failed"})
-		return
-	}
-
-	actualFilePath := matches[0]
-
-	// Get file size for performance logging
-	fileInfo, err := os.Stat(actualFilePath)
-	if err == nil {
-		fileSizeMB := float64(fileInfo.Size()) / 1024 / 1024
-		logger.Info("YouTube download completed",
-			"url", req.URL,
-			"job_id", jobID,
-			"file_path", actualFilePath,
-			"file_size_mb", fmt.Sprintf("%.2f", fileSizeMB),
-			"duration", time.Since(downloadStart))
-	}
-
-	profileName := profile.Name
-	job := models.TranscriptionJob{
-		ID:            jobID,
-		AudioPath:     actualFilePath,
-		Status:        models.StatusPending,
-		Source:        sourceYouTube,
-		SourceURL:     &req.URL,
-		SourceChannel: channel,
-		Title:         &title,
-		ProfileName:   &profileName,
-		Parameters:    profile.Parameters,
-		Execution:     profileExecutionSnapshot(profile),
-		Diarization:   profile.Parameters.Diarize,
-	}
-	job.ThumbnailPath = h.saveYouTubeThumbnail(ctx, uploadDir, jobID, videoID)
-
-	if err := h.jobRepo.Create(ctx, &job); err != nil {
-		removePartials()
-		if job.ThumbnailPath != nil {
-			_ = os.Remove(*job.ThumbnailPath)
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save transcription record", "code": "download_failed"})
-		return
-	}
-
-	if err := h.taskQueue.EnqueueJob(jobID); err != nil {
-		logger.Warn("Failed to queue YouTube job", "job_id", jobID, "error", err.Error())
-		reason := fmt.Sprintf("Downloaded, but could not be queued: %v", err)
-		job.Status = models.StatusUploaded
-		job.ErrorMessage = &reason
-		_ = h.jobRepo.Update(ctx, &job)
-	}
-
-	applySourceDescription(&job)
-	c.JSON(http.StatusOK, job)
-}
-
-// youTubeMetadata is the part of yt-dlp's info JSON the app uses.
-type youTubeMetadata struct {
-	ID              string
-	Title           string
-	Channel         *string
-	DurationSeconds *int
-	Language        *string
-	ThumbnailURL    string
-}
-
-// fetchYouTubeMetadata asks yt-dlp for a video's info without downloading it.
-// On failure it returns yt-dlp's stderr for classification.
-func fetchYouTubeMetadata(videoURL string) (*youTubeMetadata, string, error) {
-	cmd := exec.Command("yt-dlp", "--dump-json", "--skip-download", "--no-playlist", videoURL)
-	var out, stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, stderr.String(), err
-	}
-	var raw struct {
-		ID        *string  `json:"id"`
-		Title     *string  `json:"title"`
-		Channel   *string  `json:"channel"`
-		Duration  *float64 `json:"duration"`
-		Language  *string  `json:"language"`
-		Thumbnail *string  `json:"thumbnail"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &raw); err != nil {
-		return nil, stderr.String(), fmt.Errorf("unreadable yt-dlp metadata: %w", err)
-	}
-	present := func(value *string) string {
-		if value == nil {
-			return ""
-		}
-		trimmed := strings.TrimSpace(*value)
-		if trimmed == "NA" {
-			return ""
-		}
-		return trimmed
-	}
-	optional := func(value *string) *string {
-		if text := present(value); text != "" {
-			return &text
-		}
-		return nil
-	}
-	metadata := &youTubeMetadata{
-		ID:           present(raw.ID),
-		Title:        present(raw.Title),
-		Channel:      optional(raw.Channel),
-		Language:     optional(raw.Language),
-		ThumbnailURL: present(raw.Thumbnail),
-	}
-	if raw.Duration != nil {
-		seconds := int(*raw.Duration)
-		metadata.DurationSeconds = &seconds
-	}
-	return metadata, stderr.String(), nil
-}
-
 var youTubeVideoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 const (
@@ -2957,54 +2721,6 @@ func (h *Handler) saveYouTubeThumbnail(ctx context.Context, uploadDir, jobID, vi
 		return nil
 	}
 	return &thumbnailPath
-}
-
-// PreviewYouTube looks a video up without downloading it and suggests the
-// profile whose language matches the video's.
-// @Summary Preview a YouTube video
-// @Tags transcription
-// @Accept json
-// @Produce json
-// @Router /api/v1/transcription/youtube/preview [post]
-// @Security ApiKeyAuth
-// @Security BearerAuth
-func (h *Handler) PreviewYouTube(c *gin.Context) {
-	var req struct {
-		URL string `json:"url" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_url"})
-		return
-	}
-	videoURL := strings.TrimSpace(req.URL)
-	if !isYouTubeURL(videoURL) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "That is not a YouTube link. Paste a youtube.com or youtu.be URL.", "code": "invalid_url"})
-		return
-	}
-
-	metadata, stderr, err := fetchYouTubeMetadata(videoURL)
-	if err != nil {
-		logger.Warn("YouTube preview failed", "url", videoURL, "error", err.Error(), "stderr", stderr)
-		status, code, message := classifyYouTubeFailure(stderr)
-		c.JSON(status, gin.H{"error": message, "code": code})
-		return
-	}
-
-	var suggestedProfileID *string
-	if metadata.Language != nil {
-		profiles, _, _ := h.profileRepo.List(c.Request.Context(), 0, 1000)
-		suggestedProfileID = suggestProfileForLanguage(profiles, *metadata.Language)
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"video_id":             metadata.ID,
-		"title":                metadata.Title,
-		"channel":              metadata.Channel,
-		"duration_seconds":     metadata.DurationSeconds,
-		"language":             metadata.Language,
-		"thumbnail_url":        metadata.ThumbnailURL,
-		"suggested_profile_id": suggestedProfileID,
-	})
 }
 
 // suggestProfileForLanguage matches a YouTube language tag (en-US, es) to a
@@ -3082,36 +2798,6 @@ func (h *Handler) profileForQueueing(ctx context.Context, user *models.User) *mo
 		}
 	}
 	return profile
-}
-
-// isYouTubeURL accepts only http(s) links whose host is a YouTube host.
-func isYouTubeURL(rawURL string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		return false
-	}
-	switch strings.ToLower(parsed.Hostname()) {
-	case "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be":
-		return true
-	}
-	return false
-}
-
-// classifyYouTubeFailure maps yt-dlp stderr to an HTTP status, a stable code
-// and a human message.
-func classifyYouTubeFailure(stderr string) (int, string, string) {
-	lowered := strings.ToLower(stderr)
-	for _, marker := range []string{"private", "unavailable", "removed", "members-only", "members only", "age-restricted", "confirm your age"} {
-		if strings.Contains(lowered, marker) {
-			return http.StatusUnprocessableEntity, "video_unavailable", "This video is unavailable: it may be private, removed, members-only or age-restricted."
-		}
-	}
-	for _, marker := range []string{"sign in to confirm", "not a bot", "http error 403", "http error 429", "po token"} {
-		if strings.Contains(lowered, marker) {
-			return http.StatusBadGateway, "youtube_blocked", "YouTube blocked the download request. Try again later."
-		}
-	}
-	return http.StatusBadGateway, "download_failed", "The YouTube download failed. Check the link and try again."
 }
 
 // @Summary Get user's default profile

@@ -16,6 +16,8 @@ export interface AudioFile {
     source_label?: string;
     source_url?: string;
     source_channel?: string;
+    source_description?: string;
+    external_id?: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     individual_transcripts?: any;
     speakers?: number;
@@ -38,6 +40,7 @@ interface AudioListParams {
     search?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
+    source?: string;
 }
 
 export function useAudioList(params: AudioListParams) {
@@ -52,6 +55,7 @@ export function useAudioList(params: AudioListParams) {
             });
 
             if (params.search) searchParams.set('q', params.search);
+            if (params.source) searchParams.set('source', params.source);
             if (params.sortBy) {
                 searchParams.set('sort_by', params.sortBy);
                 searchParams.set('sort_order', params.sortOrder || 'desc');
@@ -84,6 +88,7 @@ export function useAudioListInfinite(params: Omit<AudioListParams, 'page'>) {
             });
 
             if (params.search) searchParams.set('q', params.search);
+            if (params.source) searchParams.set('source', params.source);
             if (params.sortBy) {
                 searchParams.set('sort_by', params.sortBy);
                 searchParams.set('sort_order', params.sortOrder || 'desc');
@@ -203,7 +208,7 @@ export function useYouTubePreview(url: string, enabled: boolean) {
                 body: JSON.stringify({ url }),
             });
             if (!response.ok) {
-                let message = `Could not look up the video (HTTP ${response.status})`;
+                let message = `Could not look up the link (HTTP ${response.status})`;
                 try {
                     const errorData = await response.json();
                     if (errorData && typeof errorData.error === "string" && errorData.error) {
@@ -239,7 +244,7 @@ export function useYouTubeDownload() {
             });
 
             if (!response.ok) {
-                let message = `Failed to download YouTube audio (HTTP ${response.status})`;
+                let message = `Failed to import the link (HTTP ${response.status})`;
                 try {
                     const errorData = await response.json();
                     if (errorData && typeof errorData.error === "string" && errorData.error) {

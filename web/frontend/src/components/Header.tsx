@@ -181,9 +181,9 @@ export function Header({ onFileSelect, onMultiTrackClick, onDownloadComplete }: 
 									<Youtube className="h-4 w-4" />
 								</div>
 								<div>
-									<div className="font-medium text-sm">YouTube URL</div>
+									<div className="font-medium text-sm">Import a link</div>
 									<div className="text-xs text-[var(--text-secondary)]">
-										Download audio from YouTube
+										Download audio from a YouTube, Instagram or TikTok link
 									</div>
 								</div>
 							</DropdownMenuItem>

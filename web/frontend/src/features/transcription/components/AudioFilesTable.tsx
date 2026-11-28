@@ -36,6 +36,13 @@ import { TranscriptionConfigDialog, type WhisperXParams } from "@/components/Tra
 import { TranscribeDDialog } from "@/components/TranscribeDDialog";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { useAudioListInfinite, type AudioFile } from "@/features/transcription/hooks/useAudioFiles";
 import { useTranscriptionEvents } from "@/features/transcription/hooks/useTranscriptionEvents";
 import { buildStartTranscriptionUrl } from "@/lib/remoteExecution";
@@ -77,6 +84,19 @@ import { useSwipeHint } from "@/hooks/use-swipe-hint";
 
 
 
+const ALL_SOURCES = "all";
+
+const SOURCE_OPTIONS = [
+	{ value: ALL_SOURCES, label: "All sources" },
+	{ value: "youtube", label: "YouTube" },
+	{ value: "instagram", label: "Instagram" },
+	{ value: "tiktok", label: "TikTok" },
+	{ value: "whatsapp", label: "WhatsApp" },
+	{ value: "plaud", label: "Plaud" },
+	{ value: "omi", label: "Omi" },
+	{ value: "upload", label: "Uploads" },
+];
+
 interface AudioFilesTableProps {
 	refreshTrigger?: number; // Optional now, kept for compatibility during refactor
 	onTranscribe?: (jobId: string) => void;
@@ -94,6 +114,7 @@ export const AudioFilesTable = memo(function AudioFilesTable({
 		{ id: "created_at", desc: true }
 	];
 	const [globalFilter, setGlobalFilter] = useState("");
+	const [sourceFilter, setSourceFilter] = useState(ALL_SOURCES);
 
 	// Query
 	const {
@@ -106,6 +127,7 @@ export const AudioFilesTable = memo(function AudioFilesTable({
 	} = useAudioListInfinite({
 		limit: 20, // Fetch 20 items per page
 		search: globalFilter,
+		source: sourceFilter === ALL_SOURCES ? undefined : sourceFilter,
 		sortBy: sorting[0]?.id,
 		sortOrder: sorting[0]?.desc ? 'desc' : 'asc'
 	});
@@ -783,7 +805,21 @@ export const AudioFilesTable = memo(function AudioFilesTable({
 					onChange={(value) => setGlobalFilter(String(value))}
 					className="w-full sm:w-80 shadow-sm border-transparent focus:border-[var(--brand-solid)] bg-white dark:bg-zinc-900"
 				/>
-				<RemoteExecutionToggle />
+				<div className="flex w-full sm:w-auto items-center gap-3">
+					<Select value={sourceFilter} onValueChange={setSourceFilter}>
+						<SelectTrigger aria-label="Filter by source" className="w-full sm:w-44 bg-white dark:bg-zinc-900">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{SOURCE_OPTIONS.map((option) => (
+								<SelectItem key={option.value} value={option.value}>
+									{option.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+					<RemoteExecutionToggle />
+				</div>
 			</div>
 
 			{/* List Container */}

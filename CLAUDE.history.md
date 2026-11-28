@@ -1,5 +1,7 @@
 # CLAUDE.history.md — Scriberr fork
 
+- 2026-11-28 — The link import takes Instagram reels and posts and TikTok videos as well as YouTube, and keeps each post's caption. Buzon gets its own idempotent import and status API, and the list gains per-source icons and a source filter. Owner ask: links he shares from his phone become reference material. X stays unsupported because it doesn't download anonymously.
+
 - 2026-11-27 — Three WhatsApp recordings sat for 45 minutes: the primary GPU host was asleep, and the fallback GPU host's wrapper waited forever for room on a card another voice service held. Wrappers now give up after their wait limit with exit 5, and Scriberr moves on to the next tier. A cancelled run now kills its wrapper on the host; before, the orphan kept the card's lock.
 
 - 2026-11-26 — WhatsApp rows dropped the "Voice note"/"Audio" split, which was guessed from the .ogg extension. Owner: no sender/chat capture, since he forwards audios to Voicenotes. Video uploads now get `source=video`; older ones stay `manual`.

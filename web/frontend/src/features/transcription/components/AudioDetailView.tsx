@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
 import { sourceAppearance } from "@/features/transcription/sourceAppearance";
+import { SourceCaption } from "@/features/transcription/components/SourceCaption";
 import { languageName } from "@/lib/languageName";
 import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, MessageCircle, FileJson, Clock, AlertCircle, Users, Copy, Hash, Link2, Languages } from "lucide-react";
 import { SplitButton } from "@/components/ui/split-button";
@@ -259,6 +260,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                 const hasSourceLink = audioFile.source_url && /^https?:\/\//i.test(audioFile.source_url);
                                                 if (!audioFile.source_label && !ranWith) return null;
                                                 return (
+                                                    <>
                                                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[var(--text-secondary)]">
                                                         {audioFile.source_label && (
                                                             <span className="inline-flex items-center gap-2 min-w-0">
@@ -270,7 +272,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                                         href={audioFile.source_url}
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
-                                                                        aria-label="Open the source video on YouTube"
+                                                                        aria-label={`Open the original post on ${audioFile.source_label}`}
                                                                         className="truncate underline-offset-2 hover:underline hover:text-[var(--text-primary)] transition-colors"
                                                                     >
                                                                         {audioFile.source_label}
@@ -287,6 +289,8 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                             </span>
                                                         )}
                                                     </div>
+                                                    {audioFile.source_description && <SourceCaption caption={audioFile.source_description} />}
+                                                    </>
                                                 );
                                             })()}
 

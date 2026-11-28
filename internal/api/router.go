@@ -148,6 +148,8 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 			// Regular API routes with compression
 			transcription.POST("/youtube", handler.DownloadFromYouTube)
 			transcription.POST("/youtube/preview", handler.PreviewYouTube)
+			transcription.POST("/links", handler.ImportLink)
+			transcription.GET("/links/:id", handler.GetLinkImport)
 			transcription.POST("/submit", handler.SubmitJob)
 			transcription.POST("/:id/start", handler.StartTranscription)
 			transcription.POST("/:id/kill", handler.KillJob)
