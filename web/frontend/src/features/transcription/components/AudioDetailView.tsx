@@ -355,7 +355,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                         </Tooltip>
                                                     )}
                                                 </div>
-                                                {audioFile.execution_path && audioFile.status !== 'pending' && (
+                                                {audioFile.execution_path && !isPost && audioFile.status !== 'pending' && (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
                                                             <span className={cn(
