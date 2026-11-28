@@ -346,6 +346,14 @@ func (h *Handler) importLink(ctx context.Context, request linkImportRequest) (*m
 		}
 	}
 
+	// -k also keeps the pre-merge streams (<job>.f<format_id>.<ext>); only the
+	// merged video and the audio are used.
+	if streams, globErr := filepath.Glob(filepath.Join(uploadDir, jobID+".f*.*")); globErr == nil {
+		for _, stream := range streams {
+			_ = os.Remove(stream)
+		}
+	}
+
 	// Find the actual downloaded files (yt-dlp changes the extension): the
 	// extracted audio is transcribed, the video is kept for its frames.
 	matches, err := filepath.Glob(filepath.Join(uploadDir, jobID+".*"))

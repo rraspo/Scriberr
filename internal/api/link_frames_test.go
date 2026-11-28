@@ -23,7 +23,8 @@ import (
 
 // fakeVideoYtDlpScript stands in for yt-dlp when a link import downloads the
 // video and keeps it (-k) beside the extracted mp3. FAKE_YTDLP_MODE "noaudio"
-// keeps the video but fails the audio extraction.
+// keeps the video but fails the audio extraction; "merged" also leaves the
+// separate video and audio streams yt-dlp merged, as -k does.
 const fakeVideoYtDlpScript = `#!/bin/sh
 mode="${FAKE_YTDLP_MODE:-ok}"
 if [ -n "$FAKE_YTDLP_LOG" ]; then echo "$*" >> "$FAKE_YTDLP_LOG"; fi
@@ -41,6 +42,10 @@ for argument in "$@"; do
 done
 video=$(echo "$output" | sed 's/%(ext)s/mp4/')
 printf 'fakevideo' > "$video"
+if [ "$mode" = "merged" ]; then
+  printf 'videostream' > "$(echo "$output" | sed 's/%(ext)s/fdash-1001v.mp4/')"
+  printf 'audiostream' > "$(echo "$output" | sed 's/%(ext)s/fdash-1002a.m4a/')"
+fi
 if [ "$mode" = "noaudio" ]; then
   echo "ERROR: Postprocessing: WARNING: unable to obtain file audio codec with ffprobe" >&2
   exit 1
@@ -157,7 +162,8 @@ func decodeVisuals(t *testing.T, recorder *httptest.ResponseRecorder) visualsBod
 // waitForVisuals polls the visuals API until extraction leaves "pending".
 func waitForVisuals(t *testing.T, handler *Handler, jobID string) visualsBody {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	// A ten-minute video builds about 50 sheets, which takes several seconds.
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		body := decodeVisuals(t, getVisuals(handler, jobID))
 		if body.Status != "pending" || time.Now().After(deadline) {

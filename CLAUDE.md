@@ -255,13 +255,18 @@ Every link import keeps its video and builds frames a session can read.
 yt-dlp downloads the best video up to 720p with audio (`-f
 "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b"`, `-k`, `--merge-output-format
 mp4`) and extracts `<job>.mp3`; the mp3 is transcribed, the video is
-`video_path`. A post whose audio extraction fails for lack of an audio track
+`video_path`. `-k` also keeps the merged streams (`<job>.f<format>.<ext>`),
+which are removed right after the download. A post whose audio extraction fails for lack of an audio track
 still keeps its video and gets visuals. When a video exists the job gets
 `visuals_status` `pending`, and the build runs in a background goroutine
 (`internal/api/link_visuals.go`, `link_sheets.go`): `ffprobe` reads the
 duration, `frameRateFor` picks 2 frames a second under 20 s, 1 a second up to
 600 s, then `600/duration` (about 600 frames in all), and one ffmpeg pass
-extracts the even grid from time zero, scaled to 720 px on the long side. Over
+extracts the even grid from time zero, scaled to 720 px on the long side. The
+grid keeps the frames ffmpeg actually produced: the container can run past the
+video stream and the fps filter rounds to the nearest frame, so the last
+predicted frame may be missing (logged, not an error); only a pass with no
+frames fails. Over
 600 s, scene changes (`scene>0.3` on keyframes) are added unless within 0.5 s
 of a kept time. Frames are stored as `<UploadDir>/visuals/<job>/frames/<n>.jpg`,
 numbered in time order. Contact sheets tile 12 consecutive frames (4 columns by

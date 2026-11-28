@@ -180,6 +180,25 @@ func (h *Handler) extractVisuals(ctx context.Context, jobID, videoPath string) (
 		return nil, errors.New("Frame extraction failed.")
 	}
 
+	// ffmpeg's fps filter can emit fewer frames than the container duration
+	// predicts, so grid positions past the produced count are dropped.
+	producedFiles, _ := filepath.Glob(filepath.Join(rawDir, "*.jpg"))
+	produced := len(producedFiles)
+	if produced == 0 {
+		return nil, errors.New("Frame extraction produced no frames.")
+	}
+	if produced < len(uniform) {
+		logger.Warn("Frame grid came up short", "job_id", jobID, "expected", len(uniform), "produced", produced)
+		kept := make([]float64, 0, len(times))
+		for _, seconds := range times {
+			if position, onGrid := uniformPosition[seconds]; onGrid && position >= produced {
+				continue
+			}
+			kept = append(kept, seconds)
+		}
+		times = kept
+	}
+
 	frames := make([]models.JobFrame, 0, len(times))
 	for index, seconds := range times {
 		target := filepath.Join(frameDir, fmt.Sprintf("%d.jpg", index))

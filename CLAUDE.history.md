@@ -1,5 +1,7 @@
 # CLAUDE.history.md — Scriberr fork
 
+- 2026-11-28 — A 61 s reel got no visuals: its container ran 20 ms past the video stream, ffmpeg produced 61 grid frames where 62 were predicted, and the build failed on the missing last one. The build now keeps the frames that were produced. The merged-stream files `-k` left beside the video are removed too.
+
 - 2026-11-28 — Link imports keep their video and build timestamped frames and contact sheets over the whole video. Owner ask: sessions cannot watch video, and visual reels (Instagram, TikTok) carry content that is not in the audio, so a session reads the frames instead.
 
 - 2026-11-28 — Link imports with no reported language now default to English. They had defaulted to Spanish, and the owner's English reels were transcribed in Spanish. The egress proxy covers only Instagram and TikTok: mission-control kept YouTube off it. The owner saw "YouTube" on an Instagram recording, most likely a cached app shell from the previous build, so the shell is now served no-cache and the page has an explicit "Watch on <source>" link.
