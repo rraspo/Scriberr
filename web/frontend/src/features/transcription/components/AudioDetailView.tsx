@@ -263,7 +263,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                     <>
                                                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[var(--text-secondary)]">
                                                         {audioFile.source_label && (
-                                                            <span className="inline-flex items-center gap-2 min-w-0">
+                                                            <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
                                                                 <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-md", tintClasses)}>
                                                                     <SourceIcon className="h-3.5 w-3.5" />
                                                                 </span>
@@ -274,7 +274,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
                                                                         aria-label={sourceLinkLabel(audioFile.source_kind)}
-                                                                        className="inline-flex items-center gap-1 text-[var(--text-tertiary)] underline-offset-2 hover:underline hover:text-primary transition-colors"
+                                                                        className="inline-flex items-center gap-1 whitespace-nowrap text-[var(--text-tertiary)] underline-offset-2 hover:underline hover:text-primary transition-colors"
                                                                     >
                                                                         <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                                                                         {sourceLinkLabel(audioFile.source_kind)}
