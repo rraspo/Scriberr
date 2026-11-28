@@ -48,6 +48,9 @@ type Config struct {
 	MissionControlURL string
 	PowerWakeRunbook  string
 	PowerSleepRunbook string
+
+	// Proxy URL yt-dlp uses for link imports only.
+	LinkImportProxy string
 }
 
 // Load loads configuration from environment variables and .env file
@@ -82,6 +85,8 @@ func Load() *Config {
 		MissionControlURL: strings.TrimRight(getEnv("MISSION_CONTROL_URL", ""), "/"),
 		PowerWakeRunbook:  getEnv("POWER_WAKE_RUNBOOK", ""),
 		PowerSleepRunbook: getEnv("POWER_SLEEP_RUNBOOK", ""),
+
+		LinkImportProxy: strings.TrimSpace(getEnv("LINK_IMPORT_PROXY", "")),
 	}
 }
 

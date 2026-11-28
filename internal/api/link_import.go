@@ -80,10 +80,18 @@ type linkMetadata struct {
 	ThumbnailURL    string
 }
 
+// withLinkProxy prepends yt-dlp's --proxy flag when a link-import proxy is set.
+func withLinkProxy(proxy string, args ...string) []string {
+	if proxy == "" {
+		return args
+	}
+	return append([]string{"--proxy", proxy}, args...)
+}
+
 // fetchLinkMetadata asks yt-dlp for a post's info without downloading it. On
 // failure it returns yt-dlp's stderr for classification.
-func fetchLinkMetadata(link, source string) (*linkMetadata, string, error) {
-	cmd := exec.Command("yt-dlp", "--dump-json", "--skip-download", "--no-playlist", link)
+func fetchLinkMetadata(link, source, proxy string) (*linkMetadata, string, error) {
+	cmd := exec.Command("yt-dlp", withLinkProxy(proxy, "--dump-json", "--skip-download", "--no-playlist", link)...)
 	var out, stderr bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
@@ -270,7 +278,7 @@ func (h *Handler) importLink(ctx context.Context, request linkImportRequest) (*m
 
 	title := sourceDisplayName(request.Source) + " Audio"
 	var metadata *linkMetadata
-	fetched, metadataStderr, metadataErr := fetchLinkMetadata(request.URL, request.Source)
+	fetched, metadataStderr, metadataErr := fetchLinkMetadata(request.URL, request.Source, h.config.LinkImportProxy)
 	if metadataErr != nil {
 		logger.Warn("Failed to get link metadata", "url", request.URL, "error", metadataErr.Error(), "stderr", metadataStderr)
 		failure := classifyLinkFailure(request.Source, metadataStderr)
@@ -304,14 +312,14 @@ func (h *Handler) importLink(ctx context.Context, request linkImportRequest) (*m
 
 	logger.Info("Starting link download", "source", request.Source, "url", request.URL, "job_id", jobID)
 	downloadStart := time.Now()
-	ytDlpCmd := exec.Command("yt-dlp",
+	ytDlpCmd := exec.Command("yt-dlp", withLinkProxy(h.config.LinkImportProxy,
 		"--extract-audio",
 		"--audio-format", "mp3",
 		"--audio-quality", "0", // best quality
 		"--output", filePath,
 		"--no-playlist",
 		request.URL,
-	)
+	)...)
 	var stderr bytes.Buffer
 	ytDlpCmd.Stderr = &stderr
 
@@ -482,7 +490,7 @@ func (h *Handler) PreviewYouTube(c *gin.Context) {
 		return
 	}
 
-	metadata, stderr, err := fetchLinkMetadata(link, source)
+	metadata, stderr, err := fetchLinkMetadata(link, source, h.config.LinkImportProxy)
 	if err != nil {
 		logger.Warn("Link preview failed", "url", link, "error", err.Error(), "stderr", stderr)
 		failure := classifyLinkFailure(source, stderr)

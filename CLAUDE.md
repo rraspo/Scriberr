@@ -184,7 +184,10 @@ run would otherwise overwrite the restart's status.
 `/@<user>/video/<digits>` and `vm.`/`vt.tiktok.com/<code>` (source `tiktok`).
 X/Twitter is not supported: its videos do not download anonymously.
 Metadata comes from one `yt-dlp --dump-json --skip-download` call (null or
-`NA` fields count as absent). Instagram and TikTok are fetched anonymously;
+`NA` fields count as absent). When `LINK_IMPORT_PROXY` is set, every yt-dlp
+call of a link import (metadata, preview, download) gets `--proxy <url>`;
+nothing else uses it (thumbnails stay direct), and the URL is never logged
+because it may carry credentials. Instagram and TikTok are fetched anonymously;
 no cookies are configured. For those two, `source_channel` is the author's
 `@handle` (Instagram's `channel`, TikTok's `uploader`), the caption is stored
 as `source_description`, and an Instagram job is titled with the caption's
