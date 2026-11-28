@@ -44,7 +44,8 @@ const sourceNames: Record<string, string> = {
     tiktok: "TikTok",
 };
 
-export function sourceLinkLabel(kind?: string): string {
+export function sourceLinkLabel(kind?: string, isPost = false): string {
     const name = kind ? sourceNames[kind] : undefined;
-    return name ? `Watch on ${name}` : "Open original";
+    if (!name) return "Open original";
+    return isPost ? `View on ${name}` : `Watch on ${name}`;
 }

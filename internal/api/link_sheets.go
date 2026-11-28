@@ -82,7 +82,11 @@ func buildContactSheets(frameDir, sheetDir string, frames []models.JobFrame, job
 				(position/sheetColumns+1)*tileHeight,
 			)
 			drawFittedTile(canvas, tile, source)
-			stampTimestamp(canvas, tile, formatSheetTimestamp(frame.TimestampSeconds))
+			stamp := frame.Label
+			if stamp == "" {
+				stamp = formatSheetTimestamp(frame.TimestampSeconds)
+			}
+			stampTimestamp(canvas, tile, stamp)
 		}
 
 		index := len(sheets)

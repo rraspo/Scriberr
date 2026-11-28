@@ -120,7 +120,11 @@ func (h *Handler) BuildJobVisuals(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start the build.", "code": "internal_error"})
 		return
 	}
-	go h.rebuildVisuals(ctx, job, source)
+	if job.LinkKind != nil && *job.LinkKind == linkKindPost {
+		go h.rebuildPostVisuals(ctx, job)
+	} else {
+		go h.rebuildVisuals(ctx, job, source)
+	}
 	c.JSON(http.StatusAccepted, h.visualsBody(job))
 }
 

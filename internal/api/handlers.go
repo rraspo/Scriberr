@@ -41,6 +41,7 @@ type Handler struct {
 	authService               *auth.AuthService
 	userService               service.UserService
 	youTubeThumbnailBaseURL   string
+	postImageTransport        http.RoundTripper
 	fileService               service.FileService
 	jobRepo                   repository.JobRepository
 	apiKeyRepo                repository.APIKeyRepository

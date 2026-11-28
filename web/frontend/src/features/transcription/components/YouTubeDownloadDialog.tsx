@@ -74,7 +74,9 @@ export function YouTubeDownloadDialog({
   const previewError = urlLooksValid && url.trim() === debouncedUrl && preview.isError
     ? (preview.error instanceof Error ? preview.error.message : "Could not look up the link.")
     : null;
-  const profileId = chosenProfileId ?? previewData?.suggested_profile_id ?? "";
+  const isPost = previewData?.kind === "post";
+  // A post is never transcribed, but the backend still requires a profile.
+  const profileId = chosenProfileId ?? previewData?.suggested_profile_id ?? (isPost ? profiles?.[0]?.id : undefined) ?? "";
   const canSubmit = Boolean(previewData) && !previewLoading && Boolean(profileId) && !isDownloading;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -224,23 +226,34 @@ export function YouTubeDownloadDialog({
                   />
                   <div className="p-3 space-y-1">
                     <p className="font-medium text-[var(--text-primary)] leading-snug">{previewData.title}</p>
-                    <p className="text-sm text-[var(--text-secondary)]">
-                      {[
-                        previewData.channel,
-                        typeof previewData.duration_seconds === "number" ? formatDuration(previewData.duration_seconds) : null,
-                      ].filter(Boolean).join(" · ")}
-                    </p>
-                    <p className="text-sm text-[var(--text-secondary)]">
-                      {previewData.language
-                        ? `${languageName(previewData.language)} (${previewData.language})`
-                        : "Language not reported"}
-                    </p>
+                    {isPost ? (
+                      <>
+                        <p className="text-sm text-[var(--text-secondary)]">{previewData.channel}</p>
+                        <p className="text-sm text-[var(--text-secondary)]">
+                          {`Post · ${previewData.image_count ?? 0} ${previewData.image_count === 1 ? "image" : "images"}`}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm text-[var(--text-secondary)]">
+                          {[
+                            previewData.channel,
+                            typeof previewData.duration_seconds === "number" ? formatDuration(previewData.duration_seconds) : null,
+                          ].filter(Boolean).join(" · ")}
+                        </p>
+                        <p className="text-sm text-[var(--text-secondary)]">
+                          {previewData.language
+                            ? `${languageName(previewData.language)} (${previewData.language})`
+                            : "Language not reported"}
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
             </div>
 
-            {previewData && !previewLoading && (
+            {previewData && !previewLoading && !isPost && (
               <div className="space-y-2">
                 <Label htmlFor="youtube-profile">Transcription profile</Label>
                 <Select value={profileId} onValueChange={setChosenProfileId}>

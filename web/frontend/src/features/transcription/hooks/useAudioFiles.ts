@@ -11,6 +11,7 @@ export interface AudioFile {
     is_multi_track?: boolean;
     error_message?: string;
     thumbnail_path?: string;
+    link_kind?: string | null;
     profile_name?: string;
     source_kind?: string;
     source_label?: string;
@@ -185,6 +186,8 @@ export interface YouTubePreview {
     language?: string | null;
     thumbnail_url: string;
     suggested_profile_id?: string | null;
+    kind?: "post" | "video";
+    image_count?: number;
 }
 
 // Looks a video up without downloading it; the query is cancelled when the

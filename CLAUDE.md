@@ -204,7 +204,7 @@ Thumbnails are fetched only for YouTube.
 from the post's language, else English, else Spanish (500 `no_profile`, after
 the metadata call only). A repeated `external_id` returns the existing job
 with 200 and runs nothing; a new job answers 201. Both return
-`{job_id, status, title, source, profile_name, recording_path, error}`, with
+`{job_id, status, title, source, kind, image_count, profile_name, recording_path, error}`, with
 `error` always present (null when none); unsupported links are 400
 `unsupported_url`, a body without `url` 400 `invalid_request`.
 `GET /api/v1/transcription/links/:id` returns the same body (404
@@ -295,6 +295,37 @@ status.
 - The recording page shows a "Frames" strip of the contact sheets (each opens
   full size in a new tab) and a "Video" link; "Building frames…" while
   pending and the muted error when failed.
+
+### Instagram image posts
+
+An Instagram post with no video (a single image or a carousel) makes yt-dlp
+fail with "No video formats found". When the metadata call fails that way
+(`internal/api/instagram_post.go`), the import takes the post path: yt-dlp runs
+with `--write-pages --skip-download` in a temp folder
+`<UploadDir>/post-pages-<job>` (removed afterwards, exit status ignored), and
+every `application/json` script blob in the page dumps is walked for the object
+whose `code` is the post's shortcode and that has `image_versions2` or
+`carousel_media`. No such object is Instagram's login wall: 502
+`instagram_login_required`; a rate-limit or login refusal in yt-dlp's stderr
+keeps its own code. The items are the carousel entries, or the post itself; a
+video item contributes its cover image, labelled "n/total video" and is not
+transcribed. Only https URLs on `cdninstagram.com`, `fbcdn.net` or their
+subdomains are fetched (redirects included), each checked before the first
+fetch, through `LINK_IMPORT_PROXY` when set; anything else, a non-200 answer or
+an image over 30 MB fails the import with 502 `download_failed`. Images are
+stored at full resolution as `<UploadDir>/visuals/<job>/frames/<n>.jpg`
+(re-encoded at quality 90 unless already JPEG), labelled "n/total", and tiled
+into contact sheets that stamp the label instead of a timestamp.
+
+The job is stored `completed` with `link_kind` `post`, no audio, no profile and
+no queueing; the caption is `source_description`, the author's `@handle` the
+channel, the title the request's, else the caption's first line, else
+"Instagram post". The first image, scaled to 320 px wide, is the thumbnail. The
+link status body and `POST /links` carry `kind` (`post` or `video`) and
+`image_count`; the dialog preview answers 200 with the same two fields and no
+profile suggestion, and the dialog import stores the post whatever profile it
+names. `POST .../visuals` on a post fetches the page and images again and never
+touches its status.
 
 ## Job source description
 

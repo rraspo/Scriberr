@@ -1,5 +1,7 @@
 # CLAUDE.history.md — Scriberr fork
 
+- 2026-11-28 — Instagram image posts failed with `download_failed` because yt-dlp only handles video. They are now stored as completed "post" jobs with their images as frames, read from the post page yt-dlp fetches.
+
 - 2026-11-28 — A 61 s reel got no visuals: its container ran 20 ms past the video stream, ffmpeg produced 61 grid frames where 62 were predicted, and the build failed on the missing last one. The build now keeps the frames that were produced. The merged-stream files `-k` left beside the video are removed too.
 
 - 2026-11-28 — Link imports keep their video and build timestamped frames and contact sheets over the whole video. Owner ask: sessions cannot watch video, and visual reels (Instagram, TikTok) carry content that is not in the audio, so a session reads the frames instead.

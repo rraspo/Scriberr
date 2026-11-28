@@ -25,6 +25,7 @@ type TranscriptionJob struct {
 	SourceDescription     *string        `json:"source_description,omitempty" gorm:"type:text"`
 	ExternalID            *string        `json:"external_id,omitempty" gorm:"type:text;index"`
 	ProfileName           *string        `json:"profile_name,omitempty" gorm:"type:text"`
+	LinkKind              *string        `json:"link_kind,omitempty" gorm:"type:text"` // "post" for an image post, nil otherwise
 	ThumbnailPath         *string        `json:"thumbnail_path,omitempty" gorm:"type:text"`
 	VideoPath             *string        `json:"-" gorm:"type:text"`
 	VisualsStatus         string         `json:"visuals_status,omitempty" gorm:"type:varchar(20)"` // "" none, pending, ready, failed
@@ -435,6 +436,7 @@ type JobFrame struct {
 	Index            int     `json:"index"`
 	TimestampSeconds float64 `json:"timestamp_seconds"`
 	URL              string  `json:"url"`
+	Label            string  `json:"label,omitempty"`
 }
 
 // JobSheet is one contact sheet: up to twelve consecutive frames tiled in

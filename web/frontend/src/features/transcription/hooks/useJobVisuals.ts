@@ -10,6 +10,13 @@ export interface JobSheet {
     content_type: string;
 }
 
+export interface JobFrame {
+    index: number;
+    timestamp_seconds: number;
+    url: string;
+    label?: string;
+}
+
 export interface JobVideo {
     url: string;
     content_type: string;
@@ -21,6 +28,7 @@ export interface JobVisuals {
     status: "none" | "pending" | "ready" | "failed";
     error: string | null;
     sheets: JobSheet[];
+    frames?: JobFrame[];
     video: JobVideo | null;
 }
 

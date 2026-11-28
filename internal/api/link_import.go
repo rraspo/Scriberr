@@ -283,6 +283,9 @@ func (h *Handler) importLink(ctx context.Context, request linkImportRequest) (*m
 	fetched, metadataStderr, metadataErr := fetchLinkMetadata(request.URL, request.Source, h.config.LinkImportProxy)
 	if metadataErr != nil {
 		logger.Warn("Failed to get link metadata", "url", request.URL, "error", metadataErr.Error(), "stderr", metadataStderr)
+		if request.Source == sourceInstagram && isNoVideoFormats(metadataStderr) {
+			return h.importInstagramPost(ctx, request, jobID)
+		}
 		failure := classifyLinkFailure(request.Source, metadataStderr)
 		if failure.code != "download_failed" {
 			return nil, &failure
@@ -525,6 +528,15 @@ func (h *Handler) PreviewYouTube(c *gin.Context) {
 	metadata, stderr, err := fetchLinkMetadata(link, source, h.config.LinkImportProxy)
 	if err != nil {
 		logger.Warn("Link preview failed", "url", link, "error", err.Error(), "stderr", stderr)
+		if source == sourceInstagram && isNoVideoFormats(stderr) {
+			preview, failure := h.previewInstagramPost(c.Request.Context(), link)
+			if failure != nil {
+				failure.respond(c)
+				return
+			}
+			c.JSON(http.StatusOK, preview)
+			return
+		}
 		failure := classifyLinkFailure(source, stderr)
 		failure.respond(c)
 		return
@@ -547,6 +559,8 @@ func (h *Handler) PreviewYouTube(c *gin.Context) {
 		"duration_seconds":     metadata.DurationSeconds,
 		"language":             metadata.Language,
 		"thumbnail_url":        metadata.ThumbnailURL,
+		"kind":                 linkKindVideo,
+		"image_count":          0,
 		"suggested_profile_id": suggestedProfileID,
 	})
 }
@@ -557,7 +571,9 @@ type linkImportResponse struct {
 	Status        string  `json:"status"`
 	Title         string  `json:"title"`
 	Source        string  `json:"source"`
-	ProfileName   string  `json:"profile_name"`
+	Kind          string  `json:"kind"`
+	ImageCount    int     `json:"image_count"`
+	ProfileName   *string `json:"profile_name"`
 	RecordingPath string  `json:"recording_path"`
 	Error         *string `json:"error"`
 	VisualsStatus string  `json:"visuals_status"`
@@ -569,10 +585,15 @@ func newLinkImportResponse(job *models.TranscriptionJob) linkImportResponse {
 		JobID:         job.ID,
 		Status:        string(job.Status),
 		Source:        job.Source,
+		Kind:          linkKindVideo,
 		RecordingPath: "/audio/" + job.ID,
 		Error:         job.ErrorMessage,
 		VisualsStatus: "none",
 		VisualsURL:    "/api/v1/transcription/" + job.ID + "/visuals",
+	}
+	if job.LinkKind != nil && *job.LinkKind == linkKindPost {
+		body.Kind = linkKindPost
+		body.ImageCount = len(job.Frames)
 	}
 	if job.VisualsStatus != "" {
 		body.VisualsStatus = job.VisualsStatus
@@ -581,7 +602,7 @@ func newLinkImportResponse(job *models.TranscriptionJob) linkImportResponse {
 		body.Title = *job.Title
 	}
 	if job.ProfileName != nil {
-		body.ProfileName = *job.ProfileName
+		body.ProfileName = job.ProfileName
 	}
 	return body
 }

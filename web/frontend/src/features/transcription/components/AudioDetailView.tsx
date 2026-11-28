@@ -4,8 +4,9 @@ import { useParams, useNavigate } from "react-router-dom";
 import { sourceAppearance, sourceLinkLabel } from "@/features/transcription/sourceAppearance";
 import { SourceCaption } from "@/features/transcription/components/SourceCaption";
 import { JobVisualsSection } from "@/features/transcription/components/JobVisualsSection";
+import { PostImagesSection } from "@/features/transcription/components/PostImagesSection";
 import { languageName } from "@/lib/languageName";
-import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, MessageCircle, FileJson, Clock, AlertCircle, Users, Copy, Hash, Link2, Languages, ExternalLink } from "lucide-react";
+import { MoreVertical, Edit2, Activity, FileText, Bot, Check, Loader2, List, AlignLeft, ArrowDownCircle, MessageCircle, FileJson, Clock, AlertCircle, Users, Copy, Hash, Link2, Languages, ExternalLink, Images } from "lucide-react";
 import { SplitButton } from "@/components/ui/split-button";
 import { useToast } from "@/components/ui/toast";
 import { Header } from "@/components/Header";
@@ -201,6 +202,8 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
         );
     }
 
+    const isPost = audioFile.link_kind === "post";
+
     // Helper to format date "Premium" style
     const formattedDate = new Date(audioFile.created_at).toLocaleDateString("en-US", {
         month: "short",
@@ -224,7 +227,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                             </div>
                             <div className="space-y-6 sm:space-y-8">
                                 {/* Sticky header: Title + Audio Player */}
-                                <div className="sticky top-0 z-10">
+                                <div className={cn(!isPost && "sticky top-0 z-10")}>
                                     {/* Title & Metadata */}
                                     <div className="space-y-4 glass-card rounded-[var(--radius-card)] border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 md:p-6 mb-4">
                                     <div className="flex items-start justify-between gap-4">
@@ -269,16 +272,22 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                                     <SourceIcon className="h-3.5 w-3.5" />
                                                                 </span>
                                                                 <span className="min-w-0 break-words">{audioFile.source_label}</span>
+                                                                {isPost && (
+                                                                    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-0.5 text-xs font-medium text-[var(--text-secondary)]">
+                                                                        <Images className="h-3 w-3" />
+                                                                        Post
+                                                                    </span>
+                                                                )}
                                                                 {hasSourceLink && (
                                                                     <a
                                                                         href={audioFile.source_url}
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
-                                                                        aria-label={sourceLinkLabel(audioFile.source_kind)}
+                                                                        aria-label={sourceLinkLabel(audioFile.source_kind, isPost)}
                                                                         className="inline-flex items-center gap-1 whitespace-nowrap text-[var(--text-tertiary)] underline-offset-2 hover:underline hover:text-primary transition-colors"
                                                                     >
                                                                         <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                                                                        {sourceLinkLabel(audioFile.source_kind)}
+                                                                        {sourceLinkLabel(audioFile.source_kind, isPost)}
                                                                     </a>
                                                                 )}
                                                             </span>
@@ -291,7 +300,9 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                         )}
                                                     </div>
                                                     {audioFile.source_description && <SourceCaption caption={audioFile.source_description} />}
-                                                    {audioFile.visuals_status && <JobVisualsSection jobId={audioFile.id} visualsStatus={audioFile.visuals_status} />}
+                                                    {audioFile.visuals_status && (isPost
+                                                        ? <PostImagesSection jobId={audioFile.id} visualsStatus={audioFile.visuals_status} />
+                                                        : <JobVisualsSection jobId={audioFile.id} visualsStatus={audioFile.visuals_status} />)}
                                                     </>
                                                 );
                                             })()}
@@ -368,6 +379,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
 
                                         {/* Action Menu */}
                                         {/* ... keeping existing Logic but updating Chat action ... */}
+                                        {!isPost && (
                                         <div className="flex items-center gap-2">
                                             <SplitButton
                                                 onClick={() => handleCopy(copyTXT, 'Conversation copied to clipboard')}
@@ -432,10 +444,12 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
                                         </div>
+                                        )}
                                     </div>
                                 </div>
 
                                     {/* Audio Player */}
+                                    {!isPost && (
                                     <div className="glass-card rounded-[var(--radius-card)] border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 md:p-6 mb-8 transition-all duration-300 hover:shadow-[var(--shadow-float)] flex items-center gap-3">
                                         <div className="flex-1 min-w-0">
                                             <EmberPlayer
@@ -462,9 +476,11 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                             </Tooltip>
                                         )}
                                     </div>
+                                    )}
                                 </div>
 
                                 {/* Transcript */}
+                                {!isPost && (
                                 <TranscriptSectionWrapper
                                     audioId={audioId}
                                     currentTime={currentTime}
@@ -477,6 +493,7 @@ export const AudioDetailView = function AudioDetailView({ audioId: propAudioId }
                                     setSpeakerRenameOpen={setSpeakerRenameOpen}
                                     isPlaying={isPlaying}
                                 />
+                                )}
                             </div>
                         </div>
                     </div>
